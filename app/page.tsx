@@ -1,69 +1,188 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { verificarAuth } from "@/lib/protect";
 
 export default function Home() {
-    async function sair() {
-
-        await supabase.auth.signOut();
-
-        router.push("/login");
-    }
 
     const router = useRouter();
 
+    const [dashboard, setDashboard] = useState({
+
+        vendasHoje: 0,
+        faturamentoMensal: 0,
+        contasVencidas: 0,
+        inadimplentes: 0,
+        estoqueBaixo: 0,
+
+    });
+
+    const [ultimasVendas, setUltimasVendas] =
+        useState<any[]>([]);
+
     useEffect(() => {
 
-        async function verificarLogin() {
+        verificarAuth(router);
 
-            const {
-                data: { session },
-            } = await supabase.auth.getSession();
-
-            if (!session) {
-
-                router.push("/login");
-            }
-        }
-
-        verificarLogin();
+        carregarDashboard();
 
     }, [router]);
 
+    async function carregarDashboard() {
+
+        // =========================
+        // DATA HOJE
+        // =========================
+
+        const hoje =
+            new Date()
+                .toISOString()
+                .split("T")[0];
+
+        const inicioMes =
+            new Date(
+                new Date().getFullYear(),
+                new Date().getMonth(),
+                1
+            )
+                .toISOString();
+
+        // =========================
+        // VENDAS HOJE
+        // =========================
+
+        const { data: vendasHoje } =
+            await supabase
+                .from("vendas")
+                .select("valor_total, created_at")
+                .gte("created_at", hoje);
+
+        const totalHoje =
+            vendasHoje?.reduce(
+                (acc, venda) =>
+                    acc + Number(venda.valor_total),
+                0
+            ) || 0;
+
+        // =========================
+        // FATURAMENTO MENSAL
+        // =========================
+
+        const { data: vendasMes } =
+            await supabase
+                .from("vendas")
+                .select("valor_total")
+                .gte("created_at", inicioMes);
+
+        const totalMes =
+            vendasMes?.reduce(
+                (acc, venda) =>
+                    acc + Number(venda.valor_total),
+                0
+            ) || 0;
+
+        // =========================
+        // CONTAS VENCIDAS
+        // =========================
+
+        const { data: contasVencidas } =
+            await supabase
+                .from("contas_receber")
+                .select("*")
+                .eq("status", "pendente")
+                .lt("data_vencimento", hoje);
+
+        // =========================
+        // CLIENTES INADIMPLENTES
+        // =========================
+
+        const { data: inadimplentes } =
+            await supabase
+                .from("clientes")
+                .select("*")
+                .eq("inadimplente", true);
+
+        // =========================
+        // ESTOQUE BAIXO
+        // =========================
+
+        const { data: estoqueBaixo } =
+            await supabase
+                .from("produtos")
+                .select("*")
+                .lte("estoque", 5);
+
+        // =========================
+        // ÚLTIMAS VENDAS
+        // =========================
+
+        const { data: ultimas } =
+            await supabase
+                .from("vendas")
+                .select(`
+                    *,
+                    clientes(nome)
+                `)
+                .order("created_at", {
+                    ascending: false,
+                })
+                .limit(5);
+
+        setUltimasVendas(ultimas || []);
+
+        setDashboard({
+
+            vendasHoje: totalHoje,
+
+            faturamentoMensal: totalMes,
+
+            contasVencidas:
+                contasVencidas?.length || 0,
+
+            inadimplentes:
+                inadimplentes?.length || 0,
+
+            estoqueBaixo:
+                estoqueBaixo?.length || 0,
+
+        });
+    }
+
     const cards = [
+
         {
             titulo: "Vendas do Dia",
-            valor: "R$ 3.250",
+            valor: `R$ ${dashboard.vendasHoje.toFixed(2)}`,
             icone: "💰",
         },
+
         {
             titulo: "Faturamento Mensal",
-            valor: "R$ 48.900",
+            valor: `R$ ${dashboard.faturamentoMensal.toFixed(2)}`,
             icone: "📈",
         },
+
         {
             titulo: "Contas Vencidas",
-            valor: "12",
+            valor: dashboard.contasVencidas,
             icone: "⚠️",
         },
+
         {
             titulo: "Clientes Inadimplentes",
-            valor: "5",
+            valor: dashboard.inadimplentes,
             icone: "🚫",
         },
+
         {
             titulo: "Estoque Baixo",
-            valor: "8 produtos",
+            valor: dashboard.estoqueBaixo,
             icone: "📦",
         },
-        {
-            titulo: "Últimas Vendas",
-            valor: "18 hoje",
-            icone: "🧾",
-        },
+
     ];
 
     return (
@@ -79,43 +198,37 @@ export default function Home() {
                     </h1>
 
                     <p className="text-gray-500 mt-2">
-                        Dashboard principal
+                        Dashboard profissional
                     </p>
 
                 </div>
 
                 <div className="flex flex-wrap gap-3">
-                    <button
-                        onClick={sair}
-                        className="bg-red-600 text-white px-5 py-3 rounded-2xl shadow-md"
-                    >
-                        Sair
-                    </button>
 
                     <Link
                         href="/clientes"
-                        className="bg-white px-5 py-3 rounded-2xl shadow-md hover:bg-gray-50"
+                        className="bg-white px-5 py-3 rounded-2xl shadow-md"
                     >
                         Clientes
                     </Link>
 
                     <Link
                         href="/produtos"
-                        className="bg-white px-5 py-3 rounded-2xl shadow-md hover:bg-gray-50"
+                        className="bg-white px-5 py-3 rounded-2xl shadow-md"
                     >
                         Produtos
                     </Link>
 
                     <Link
                         href="/vendas"
-                        className="bg-white px-5 py-3 rounded-2xl shadow-md hover:bg-gray-50"
+                        className="bg-white px-5 py-3 rounded-2xl shadow-md"
                     >
                         Vendas
                     </Link>
 
                     <Link
                         href="/contas-receber"
-                        className="bg-white px-5 py-3 rounded-2xl shadow-md hover:bg-gray-50"
+                        className="bg-white px-5 py-3 rounded-2xl shadow-md"
                     >
                         Financeiro
                     </Link>
@@ -130,7 +243,7 @@ export default function Home() {
 
                     <div
                         key={index}
-                        className="bg-white p-6 rounded-3xl shadow-md hover:shadow-xl transition-all"
+                        className="bg-white p-6 rounded-3xl shadow-md"
                     >
 
                         <div className="flex items-center justify-between mb-4">
@@ -145,7 +258,7 @@ export default function Home() {
 
                         </div>
 
-                        <p className="text-2xl md:text-3xl font-bold">
+                        <p className="text-3xl font-bold">
                             {card.valor}
                         </p>
 
@@ -155,101 +268,32 @@ export default function Home() {
 
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div className="bg-white p-6 rounded-3xl shadow-md">
 
-                <div className="bg-white p-6 rounded-3xl shadow-md">
+                <h2 className="text-2xl font-bold mb-6">
+                    Últimas vendas
+                </h2>
 
-                    <h2 className="text-xl font-bold mb-6">
-                        Últimas vendas
-                    </h2>
+                <div className="space-y-4">
 
-                    <div className="space-y-4">
+                    {ultimasVendas.map((venda) => (
 
-                        <div className="flex justify-between border-b pb-3">
-
-                            <span>
-                                João Silva
-                            </span>
-
-                            <span className="font-semibold">
-                                R$ 420
-                            </span>
-
-                        </div>
-
-                        <div className="flex justify-between border-b pb-3">
+                        <div
+                            key={venda.id}
+                            className="flex justify-between border-b pb-3"
+                        >
 
                             <span>
-                                Maria Souza
+                                {venda.clientes?.nome || "Cliente"}
                             </span>
 
-                            <span className="font-semibold">
-                                R$ 890
-                            </span>
-
-                        </div>
-
-                        <div className="flex justify-between border-b pb-3">
-
-                            <span>
-                                Carlos Lima
-                            </span>
-
-                            <span className="font-semibold">
-                                R$ 1.250
+                            <span className="font-bold">
+                                R$ {Number(venda.valor_total).toFixed(2)}
                             </span>
 
                         </div>
 
-                    </div>
-
-                </div>
-
-                <div className="bg-white p-6 rounded-3xl shadow-md">
-
-                    <h2 className="text-xl font-bold mb-6">
-                        Resumo financeiro
-                    </h2>
-
-                    <div className="space-y-5">
-
-                        <div>
-
-                            <p className="text-gray-500 text-sm">
-                                Entradas
-                            </p>
-
-                            <p className="text-2xl font-bold text-green-600">
-                                R$ 48.900
-                            </p>
-
-                        </div>
-
-                        <div>
-
-                            <p className="text-gray-500 text-sm">
-                                Saídas
-                            </p>
-
-                            <p className="text-2xl font-bold text-red-600">
-                                R$ 17.300
-                            </p>
-
-                        </div>
-
-                        <div>
-
-                            <p className="text-gray-500 text-sm">
-                                Lucro estimado
-                            </p>
-
-                            <p className="text-3xl font-bold">
-                                R$ 31.600
-                            </p>
-
-                        </div>
-
-                    </div>
+                    ))}
 
                 </div>
 
