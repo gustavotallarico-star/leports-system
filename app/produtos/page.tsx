@@ -1,13 +1,40 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
+
+// ========================================
+// TYPES
+// ========================================
+
+interface Produto {
+    id: string;
+    nome: string;
+    sku: string;
+    categoria: string;
+    preco: number;
+    custo: number;
+    estoque: number;
+    estoque_minimo: number;
+    created_at?: string;
+}
+
+// ========================================
+// PAGE
+// ========================================
 
 export default function ProdutosPage() {
 
-    const [produtos, setProdutos] = useState<any[]>([]);
+    // ========================================
+    // STATES
+    // ========================================
+
+    const [produtos, setProdutos] = useState<Produto[]>([]);
     const [busca, setBusca] = useState("");
-    const [editandoId, setEditandoId] = useState<string | null>(null);
+    const [loading, setLoading] = useState(false);
+
+    const [editandoId, setEditandoId] =
+        useState<string | null>(null);
 
     const [form, setForm] = useState({
         nome: "",
@@ -19,56 +46,153 @@ export default function ProdutosPage() {
         estoque_minimo: "",
     });
 
-    // 🔥 FUNÇÃO DE MÁSCARA (vírgula automática)
+    // ========================================
+    // FORMATADORES
+    // ========================================
+
     function formatMoney(value: string) {
+
         const onlyNumbers = value.replace(/\D/g, "");
 
-        const number = (Number(onlyNumbers) / 100).toLocaleString("pt-BR", {
+        const number = (
+            Number(onlyNumbers) / 100
+        ).toLocaleString("pt-BR", {
             minimumFractionDigits: 2,
         });
 
         return number;
     }
 
+    function formatarReal(valor: number) {
+
+        return valor.toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+        });
+    }
+
+    // ========================================
+    // LOAD
+    // ========================================
+
     async function carregarProdutos() {
 
-        const { data } = await supabase
-            .from("produtos")
-            .select("*")
-            .order("created_at", { ascending: false });
+        try {
 
-        setProdutos(data || []);
+            setLoading(true);
+
+            const { data, error } = await supabase
+                .from("produtos")
+                .select("*")
+                .order("created_at", {
+                    ascending: false,
+                });
+
+            if (error) {
+                console.log(error);
+                alert("Erro ao carregar produtos");
+                return;
+            }
+
+            setProdutos(data || []);
+
+        } finally {
+
+            setLoading(false);
+        }
     }
+
+    // ========================================
+    // SALVAR
+    // ========================================
 
     async function salvarProduto() {
 
-        if (!form.nome) return;
+        try {
 
-        const payload = {
-            ...form,
-            preco: Number(form.preco.replace(/\D/g, "")) / 100,
-            custo: Number(form.custo.replace(/\D/g, "")) / 100,
-            estoque: Number(form.estoque),
-            estoque_minimo: Number(form.estoque_minimo),
-        };
+            if (!form.nome.trim()) {
+                alert("Digite o nome do produto");
+                return;
+            }
 
-        if (editandoId) {
+            if (!form.preco) {
+                alert("Digite o preço");
+                return;
+            }
 
-            await supabase
-                .from("produtos")
-                .update(payload)
-                .eq("id", editandoId);
+            if (Number(form.estoque) < 0) {
+                alert("Estoque inválido");
+                return;
+            }
 
-        } else {
+            const payload = {
 
-            await supabase
-                .from("produtos")
-                .insert([payload]);
+                nome: form.nome,
+                sku: form.sku,
+                categoria: form.categoria,
+
+                preco:
+                    Number(
+                        form.preco.replace(/\D/g, "")
+                    ) / 100,
+
+                custo:
+                    Number(
+                        form.custo.replace(/\D/g, "")
+                    ) / 100,
+
+                estoque:
+                    Number(form.estoque),
+
+                estoque_minimo:
+                    Number(form.estoque_minimo),
+            };
+
+            if (editandoId) {
+
+                const { error } = await supabase
+                    .from("produtos")
+                    .update(payload)
+                    .eq("id", editandoId);
+
+                if (error) {
+                    console.log(error);
+                    alert("Erro ao atualizar produto");
+                    return;
+                }
+
+                alert("Produto atualizado");
+
+            } else {
+
+                const { error } = await supabase
+                    .from("produtos")
+                    .insert([payload]);
+
+                if (error) {
+                    console.log(error);
+                    alert("Erro ao salvar produto");
+                    return;
+                }
+
+                alert("Produto cadastrado");
+            }
+
+            limparFormulario();
+
+            carregarProdutos();
+
+        } catch (error) {
+
+            console.log(error);
+
+            alert("Erro inesperado");
         }
-
-        limparFormulario();
-        carregarProdutos();
     }
+
+    // ========================================
+    // LIMPAR
+    // ========================================
 
     function limparFormulario() {
 
@@ -85,49 +209,128 @@ export default function ProdutosPage() {
         setEditandoId(null);
     }
 
-    function editarProduto(produto: any) {
+    // ========================================
+    // EDITAR
+    // ========================================
+
+    function editarProduto(produto: Produto) {
 
         setEditandoId(produto.id);
 
         setForm({
+
             nome: produto.nome || "",
+
             sku: produto.sku || "",
+
             categoria: produto.categoria || "",
+
             preco: produto.preco
-                ? (produto.preco * 100).toFixed(0)
+                ? formatMoney(
+                    String(produto.preco * 100)
+                )
                 : "",
+
             custo: produto.custo
-                ? (produto.custo * 100).toFixed(0)
+                ? formatMoney(
+                    String(produto.custo * 100)
+                )
                 : "",
+
             estoque: String(produto.estoque || ""),
-            estoque_minimo: String(produto.estoque_minimo || ""),
+
+            estoque_minimo: String(
+                produto.estoque_minimo || ""
+            ),
         });
 
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        window.scrollTo({
+            top: 0,
+            behavior: "smooth",
+        });
     }
+
+    // ========================================
+    // EXCLUIR
+    // ========================================
 
     async function excluirProduto(id: string) {
 
-        await supabase
-            .from("produtos")
-            .delete()
-            .eq("id", id);
+        const confirmar = confirm(
+            "Deseja realmente excluir este produto?"
+        );
 
-        carregarProdutos();
+        if (!confirmar) return;
+
+        try {
+
+            const { error } = await supabase
+                .from("produtos")
+                .delete()
+                .eq("id", id);
+
+            if (error) {
+                console.log(error);
+                alert("Erro ao excluir produto");
+                return;
+            }
+
+            alert("Produto excluído");
+
+            carregarProdutos();
+
+        } catch (error) {
+
+            console.log(error);
+
+            alert("Erro inesperado");
+        }
     }
 
-    function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    // ========================================
+    // CHANGE INPUT
+    // ========================================
+
+    function handleChange(
+        e: React.ChangeEvent<HTMLInputElement>
+    ) {
 
         const { name, value } = e.target;
 
-        // 💰 aplica máscara apenas em preço e custo
-        if (name === "preco" || name === "custo") {
+        // PREÇO E CUSTO
+
+        if (
+            name === "preco" ||
+            name === "custo"
+        ) {
+
             setForm({
                 ...form,
                 [name]: formatMoney(value),
             });
+
             return;
         }
+
+        // NUMÉRICOS
+
+        if (
+            name === "estoque" ||
+            name === "estoque_minimo"
+        ) {
+
+            const onlyNumbers =
+                value.replace(/\D/g, "");
+
+            setForm({
+                ...form,
+                [name]: onlyNumbers,
+            });
+
+            return;
+        }
+
+        // DEFAULT
 
         setForm({
             ...form,
@@ -135,32 +338,79 @@ export default function ProdutosPage() {
         });
     }
 
-    const produtosFiltrados = produtos.filter((produto) => {
+    // ========================================
+    // FILTRO
+    // ========================================
+
+    const produtosFiltrados = useMemo(() => {
 
         const termo = busca.toLowerCase();
 
-        return (
-            (produto.nome || "").toLowerCase().includes(termo) ||
-            (produto.sku || "").toLowerCase().includes(termo) ||
-            (produto.categoria || "").toLowerCase().includes(termo)
-        );
-    });
+        return produtos.filter((produto) => {
+
+            return (
+
+                (produto.nome || "")
+                    .toLowerCase()
+                    .includes(termo)
+
+                ||
+
+                (produto.sku || "")
+                    .toLowerCase()
+                    .includes(termo)
+
+                ||
+
+                (produto.categoria || "")
+                    .toLowerCase()
+                    .includes(termo)
+            );
+        });
+
+    }, [busca, produtos]);
+
+    // ========================================
+    // INIT
+    // ========================================
 
     useEffect(() => {
+
         carregarProdutos();
+
     }, []);
+
+    // ========================================
+    // UI
+    // ========================================
 
     return (
 
-        <div className="p-10 bg-gray-100 min-h-screen">
+        <div className="min-h-screen bg-gray-100 p-4 md:p-10">
 
-            <h1 className="text-4xl font-bold mb-8">
-                Produtos
-            </h1>
+            {/* HEADER */}
 
-            <div className="bg-white p-6 rounded-2xl shadow-md mb-8">
+            <div className="flex items-center justify-between mb-8">
 
-                <div className="grid grid-cols-4 gap-4">
+                <div>
+
+                    <h1 className="text-3xl md:text-4xl font-bold">
+                        Produtos
+                    </h1>
+
+                    <p className="text-gray-500 mt-2">
+                        Cadastro e gerenciamento de produtos
+                    </p>
+
+                </div>
+
+            </div>
+
+            {/* FORM */}
+
+            <div className="bg-white p-6 rounded-3xl shadow-md mb-8">
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
 
                     <input
                         name="nome"
@@ -220,99 +470,209 @@ export default function ProdutosPage() {
 
                 </div>
 
-                <button
-                    onClick={salvarProduto}
-                    className="mt-6 bg-black text-white px-6 py-3 rounded-xl"
-                >
-                    {editandoId ? "Atualizar Produto" : "Salvar Produto"}
-                </button>
+                <div className="flex gap-4 mt-6">
+
+                    <button
+                        onClick={salvarProduto}
+                        className="bg-black text-white px-6 py-3 rounded-xl"
+                    >
+                        {editandoId
+                            ? "Atualizar Produto"
+                            : "Salvar Produto"}
+                    </button>
+
+                    {editandoId && (
+
+                        <button
+                            onClick={limparFormulario}
+                            className="bg-gray-300 px-6 py-3 rounded-xl"
+                        >
+                            Cancelar
+                        </button>
+                    )}
+
+                </div>
 
             </div>
 
-            <div className="mb-4">
+            {/* BUSCA */}
+
+            <div className="mb-6">
 
                 <input
                     type="text"
                     placeholder="Buscar produto..."
                     value={busca}
-                    onChange={(e) => setBusca(e.target.value)}
+                    onChange={(e) =>
+                        setBusca(e.target.value)
+                    }
                     className="w-full border p-4 rounded-2xl"
                 />
 
             </div>
 
-            <div className="bg-white rounded-2xl shadow-md overflow-hidden">
+            {/* TABELA */}
 
-                <table className="w-full">
+            <div className="bg-white rounded-3xl shadow-md overflow-hidden">
 
-                    <thead className="bg-gray-100">
+                <div className="overflow-x-auto">
 
-                        <tr>
-                            <th className="p-4 text-left">Produto</th>
-                            <th className="p-4 text-left">Categoria</th>
-                            <th className="p-4 text-left">Preço</th>
-                            <th className="p-4 text-left">Estoque</th>
-                            <th className="p-4 text-left">Status</th>
-                            <th className="p-4 text-left">Ações</th>
-                        </tr>
+                    <table className="w-full min-w-[900px]">
 
-                    </thead>
+                        <thead className="bg-gray-100">
 
-                    <tbody>
+                            <tr>
 
-                        {produtosFiltrados.map((produto) => (
+                                <th className="p-4 text-left">
+                                    Produto
+                                </th>
 
-                            <tr key={produto.id} className="border-t">
+                                <th className="p-4 text-left">
+                                    SKU
+                                </th>
 
-                                <td className="p-4">{produto.nome}</td>
-                                <td className="p-4">{produto.categoria}</td>
-                                <td className="p-4">
-                                    R$ {Number(produto.preco).toFixed(2)}
-                                </td>
-                                <td className="p-4">{produto.estoque}</td>
+                                <th className="p-4 text-left">
+                                    Categoria
+                                </th>
 
-                                <td className="p-4">
+                                <th className="p-4 text-left">
+                                    Preço
+                                </th>
 
-                                    {produto.estoque <= produto.estoque_minimo ? (
+                                <th className="p-4 text-left">
+                                    Custo
+                                </th>
 
-                                        <span className="bg-red-600 text-white px-2 py-1 rounded-full text-xs">
-                                            Estoque Baixo
-                                        </span>
+                                <th className="p-4 text-left">
+                                    Estoque
+                                </th>
 
-                                    ) : (
+                                <th className="p-4 text-left">
+                                    Status
+                                </th>
 
-                                        <span className="bg-green-600 text-white px-2 py-1 rounded-full text-xs">
-                                            OK
-                                        </span>
-                                    )}
-
-                                </td>
-
-                                <td className="p-4">
-
-                                    <button
-                                        onClick={() => editarProduto(produto)}
-                                        className="bg-blue-600 text-white px-4 py-2 rounded-lg mr-2"
-                                    >
-                                        Editar
-                                    </button>
-
-                                    <button
-                                        onClick={() => excluirProduto(produto.id)}
-                                        className="bg-red-600 text-white px-4 py-2 rounded-lg"
-                                    >
-                                        Excluir
-                                    </button>
-
-                                </td>
+                                <th className="p-4 text-left">
+                                    Ações
+                                </th>
 
                             </tr>
 
-                        ))}
+                        </thead>
 
-                    </tbody>
+                        <tbody>
 
-                </table>
+                            {loading && (
+
+                                <tr>
+
+                                    <td
+                                        colSpan={8}
+                                        className="p-10 text-center"
+                                    >
+                                        Carregando...
+                                    </td>
+
+                                </tr>
+                            )}
+
+                            {!loading &&
+                                produtosFiltrados.length === 0 && (
+
+                                    <tr>
+
+                                        <td
+                                            colSpan={8}
+                                            className="p-10 text-center"
+                                        >
+                                            Nenhum produto encontrado
+                                        </td>
+
+                                    </tr>
+                                )}
+
+                            {!loading &&
+                                produtosFiltrados.map((produto) => (
+
+                                    <tr
+                                        key={produto.id}
+                                        className="border-t"
+                                    >
+
+                                        <td className="p-4 font-medium">
+                                            {produto.nome}
+                                        </td>
+
+                                        <td className="p-4">
+                                            {produto.sku}
+                                        </td>
+
+                                        <td className="p-4">
+                                            {produto.categoria}
+                                        </td>
+
+                                        <td className="p-4">
+                                            {formatarReal(produto.preco)}
+                                        </td>
+
+                                        <td className="p-4">
+                                            {formatarReal(produto.custo)}
+                                        </td>
+
+                                        <td className="p-4">
+                                            {produto.estoque}
+                                        </td>
+
+                                        <td className="p-4">
+
+                                            {produto.estoque <= produto.estoque_minimo ? (
+
+                                                <span className="bg-red-600 text-white px-3 py-1 rounded-full text-xs">
+                                                    Estoque Baixo
+                                                </span>
+
+                                            ) : (
+
+                                                <span className="bg-green-600 text-white px-3 py-1 rounded-full text-xs">
+                                                    OK
+                                                </span>
+                                            )}
+
+                                        </td>
+
+                                        <td className="p-4">
+
+                                            <div className="flex gap-2">
+
+                                                <button
+                                                    onClick={() =>
+                                                        editarProduto(produto)
+                                                    }
+                                                    className="bg-blue-600 text-white px-4 py-2 rounded-lg"
+                                                >
+                                                    Editar
+                                                </button>
+
+                                                <button
+                                                    onClick={() =>
+                                                        excluirProduto(produto.id)
+                                                    }
+                                                    className="bg-red-600 text-white px-4 py-2 rounded-lg"
+                                                >
+                                                    Excluir
+                                                </button>
+
+                                            </div>
+
+                                        </td>
+
+                                    </tr>
+                                ))}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
 
             </div>
 
