@@ -81,8 +81,11 @@ export default function VendasPage() {
             Number(produto.preco) *
             quantidade;
 
+        const valorEntrada =
+            Number(entrada || 0);
+
         const saldoRestante =
-            valorTotal - entrada;
+            valorTotal - valorEntrada;
 
         // =========================
         // CRIA VENDA
@@ -103,7 +106,7 @@ export default function VendasPage() {
                         parcelado === "sim"
                             ? parcelas
                             : 1,
-                    entrada,
+                    entrada: valorEntrada,
                     saldo_restante:
                         saldoRestante,
                     primeiro_vencimento:
@@ -135,7 +138,8 @@ export default function VendasPage() {
         ) {
 
             const valorParcela =
-                saldoRestante / parcelas;
+                Number(saldoRestante) /
+                Number(parcelas);
 
             const contas = [];
 
