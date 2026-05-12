@@ -1,767 +1,224 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
-import { verificarAuth } from "@/lib/protect";
 
 interface ContaReceber {
-
-    id: string;
-
-    cliente_id: string;
-
-    venda_id: string;
-
+    id: number;
+    cliente_id: number;
+    venda_id: number;
     valor: number;
-
     valor_pago: number;
-
     saldo_restante: number;
-
     parcela: number;
-
     total_parcelas: number;
-
     data_vencimento: string;
-
-    data_pagamento?: string;
-
+    data_pagamento: string | null;
     status: string;
+    forma_pagamento: string;
 
-    forma_pagamento?: string;
-
-    observacao?: string;
-
-    clientes?: {
-
+    clientes: {
         nome: string;
-
         telefone: string;
-    };
+    }[];
 }
 
 export default function ContasReceberPage() {
 
-    const router = useRouter();
-
-    const [loading, setLoading] =
-        useState(true);
-
-    const [contas, setContas] =
-        useState<ContaReceber[]>([]);
-
-    const [filtro, setFiltro] =
-        useState("TODOS");
-
-    const [busca, setBusca] =
-        useState("");
+    const [contas, setContas] = useState<ContaReceber[]>([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        carregarContas();
+    }, []);
 
-        verificarAuth(router);
-
-        iniciarPagina();
-
-    }, [router]);
-
-    async function iniciarPagina() {
+    async function carregarContas() {
 
         setLoading(true);
 
-        await atualizarAtrasadas();
-
-        await carregar();
-
-        setLoading(false);
-    }
-
-    // =========================
-    // ATUALIZAR ATRASADAS
-    // =========================
-
-    async function atualizarAtrasadas() {
-
-        const hoje = new Date();
-
-        hoje.setHours(0, 0, 0, 0);
-
-        await supabase
-
+        const query = supabase
             .from("contas_receber")
-
-            .update({
-                status: "ATRASADO"
-            })
-
-            .lt(
-                "data_vencimento",
-                hoje.toISOString()
-            )
-
-            .eq("status", "PENDENTE");
-    }
-
-    // =========================
-    // CARREGAR
-    // =========================
-
-    async function carregar() {
-
-        let query = supabase
-
-            .from("contas_receber")
-
             .select(`
-                id,
-                cliente_id,
-                venda_id,
-                valor,
-                valor_pago,
-                saldo_restante,
-                parcela,
-                total_parcelas,
-                data_vencimento,
-                data_pagamento,
-                status,
-                forma_pagamento,
-                clientes(
+                *,
+                clientes (
                     nome,
                     telefone
                 )
             `)
+            .order("data_vencimento", { ascending: true });
 
-            .order(
-                "data_vencimento",
-                {
-                    ascending: true,
-                }
-            );
+        const { data, error } = await query;
 
-        if (busca) {
-
-            query = query.ilike(
-                "clientes.nome",
-                `%${busca}%`
-            );
-        }
-
-        const { data } = await query;
-
-        setContas(data || []);
-    }
-
-    // =========================
-    // RECEBER PAGAMENTO
-    // =========================
-
-    async function receberPagamento(
-        conta: ContaReceber
-    ) {
-
-        const valor =
-            prompt(
-                `Valor recebido da parcela:\nSaldo restante: R$ ${Number(
-                    conta.saldo_restante || conta.valor
-                ).toFixed(2)}`
-            );
-
-        if (!valor) return;
-
-        const valorRecebido =
-            Number(valor);
-
-        if (
-            isNaN(valorRecebido) ||
-            valorRecebido <= 0
-        ) {
-
-            alert("Valor inválido");
-
+        if (error) {
+            console.error("Erro ao carregar contas:", error);
+            setLoading(false);
             return;
         }
 
-        const valorAtualPago =
-            Number(conta.valor_pago || 0);
-
-        const valorTotal =
-            Number(conta.valor);
-
-        const novoValorPago =
-            valorAtualPago +
-            valorRecebido;
-
-        const novoSaldo =
-            valorTotal -
-            novoValorPago;
-
-        let status = "PENDENTE";
-
-        if (novoSaldo <= 0) {
-
-            status = "PAGO";
-
-        } else {
-
-            status = "PARCIAL";
-        }
-
-        await supabase
-
-            .from("contas_receber")
-
-            .update({
-
-                valor_pago:
-                    novoValorPago,
-
-                saldo_restante:
-                    novoSaldo <= 0
-                        ? 0
-                        : novoSaldo,
-
-                data_pagamento:
-                    status === "PAGO"
-                        ? new Date().toISOString()
-                        : null,
-
-                status,
-            })
-
-            .eq("id", conta.id);
-
-        // =========================
-        // REGISTRO RECEBIMENTO
-        // =========================
-
-        await supabase
-
-            .from("recebimentos")
-
-            .insert([
-
-                {
-
-                    conta_receber_id:
-                        conta.id,
-
-                    cliente_id:
-                        conta.cliente_id,
-
-                    venda_id:
-                        conta.venda_id,
-
-                    valor:
-                        valorRecebido,
-
-                    forma_pagamento:
-                        "PIX",
-
-                    created_at:
-                        new Date().toISOString(),
-                }
-            ]);
-
-        await carregar();
+        setContas(data || []);
+        setLoading(false);
     }
 
-    // =========================
-    // FILTROS
-    // =========================
+    async function marcarComoPago(id: number) {
 
-    const contasFiltradas =
-        useMemo(() => {
+        const conta = contas.find(c => c.id === id);
 
-            return contas.filter((c) => {
+        if (!conta) return;
 
-                if (
-                    filtro === "TODOS"
-                ) {
+        const valorPago = conta.valor;
 
-                    return true;
-                }
+        const { error } = await supabase
+            .from("contas_receber")
+            .update({
+                status: "Pago",
+                valor_pago: valorPago,
+                saldo_restante: 0,
+                data_pagamento: new Date().toISOString(),
+            })
+            .eq("id", id);
 
-                return c.status === filtro;
-            });
+        if (error) {
+            console.error(error);
+            return;
+        }
 
-        }, [contas, filtro]);
+        carregarContas();
+    }
 
-    // =========================
-    // KPIs
-    // =========================
+    function formatarMoeda(valor: number) {
+        return valor.toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
+        });
+    }
 
-    const totalReceber =
-        contasFiltradas.reduce(
+    function formatarData(data: string | null) {
 
-            (acc, item) =>
+        if (!data) return "-";
 
-                acc +
-                Number(
-                    item.saldo_restante ||
-                    item.valor
-                ),
-
-            0
-        );
-
-    const totalAtrasado =
-        contasFiltradas
-
-            .filter(
-                (c) =>
-                    c.status ===
-                    "ATRASADO"
-            )
-
-            .reduce(
-
-                (acc, item) =>
-
-                    acc +
-                    Number(
-                        item.saldo_restante ||
-                        item.valor
-                    ),
-
-                0
-            );
-
-    const totalPago =
-        contasFiltradas
-
-            .filter(
-                (c) =>
-                    c.status ===
-                    "PAGO"
-            )
-
-            .reduce(
-
-                (acc, item) =>
-
-                    acc +
-                    Number(
-                        item.valor_pago || 0
-                    ),
-
-                0
-            );
-
-    if (loading) {
-
-        return (
-
-            <div className="min-h-screen flex items-center justify-center">
-
-                <p className="text-xl">
-
-                    Carregando financeiro...
-
-                </p>
-
-            </div>
-        );
+        return new Date(data).toLocaleDateString("pt-BR");
     }
 
     return (
+        <div className="p-6">
 
-        <div className="p-4 md:p-10 bg-gray-100 min-h-screen">
-
-            {/* HEADER */}
-
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-
-                <div>
-
-                    <h1 className="text-3xl md:text-4xl font-bold">
-
-                        Contas a Receber
-
-                    </h1>
-
-                    <p className="text-gray-500 mt-2">
-
-                        Gestão financeira e cobranças
-
-                    </p>
-
-                </div>
-
+            <div className="flex items-center justify-between mb-6">
+                <h1 className="text-3xl font-bold">
+                    Contas a Receber
+                </h1>
             </div>
 
-            {/* KPIs */}
+            <div className="bg-white rounded-2xl shadow overflow-hidden">
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <table className="w-full">
 
-                <div className="bg-white p-6 rounded-3xl shadow-md">
+                    <thead className="bg-gray-100">
+                        <tr>
 
-                    <p className="text-gray-500 mb-2">
+                            <th className="text-left p-4">Cliente</th>
+                            <th className="text-left p-4">Telefone</th>
+                            <th className="text-left p-4">Parcela</th>
+                            <th className="text-left p-4">Valor</th>
+                            <th className="text-left p-4">Vencimento</th>
+                            <th className="text-left p-4">Pagamento</th>
+                            <th className="text-left p-4">Status</th>
+                            <th className="text-left p-4">Ações</th>
 
-                        Total em aberto
+                        </tr>
+                    </thead>
 
-                    </p>
+                    <tbody>
 
-                    <h2 className="text-3xl font-bold text-orange-500">
-
-                        R$ {totalReceber.toFixed(2)}
-
-                    </h2>
-
-                </div>
-
-                <div className="bg-white p-6 rounded-3xl shadow-md">
-
-                    <p className="text-gray-500 mb-2">
-
-                        Total atrasado
-
-                    </p>
-
-                    <h2 className="text-3xl font-bold text-red-600">
-
-                        R$ {totalAtrasado.toFixed(2)}
-
-                    </h2>
-
-                </div>
-
-                <div className="bg-white p-6 rounded-3xl shadow-md">
-
-                    <p className="text-gray-500 mb-2">
-
-                        Total recebido
-
-                    </p>
-
-                    <h2 className="text-3xl font-bold text-green-600">
-
-                        R$ {totalPago.toFixed(2)}
-
-                    </h2>
-
-                </div>
-
-            </div>
-
-            {/* FILTROS */}
-
-            <div className="bg-white p-4 rounded-3xl shadow-md mb-8">
-
-                <div className="flex flex-col md:flex-row gap-4">
-
-                    <input
-                        type="text"
-                        placeholder="Buscar cliente..."
-                        value={busca}
-                        onChange={(e) =>
-                            setBusca(
-                                e.target.value
-                            )
-                        }
-                        className="border p-3 rounded-xl flex-1"
-                    />
-
-                    <div className="flex flex-wrap gap-2">
-
-                        <button
-                            onClick={() =>
-                                setFiltro("TODOS")
-                            }
-                            className={`px-4 py-2 rounded-xl text-white ${filtro === "TODOS"
-                                ? "bg-black"
-                                : "bg-gray-400"
-                                }`}
-                        >
-                            Todos
-                        </button>
-
-                        <button
-                            onClick={() =>
-                                setFiltro("PENDENTE")
-                            }
-                            className={`px-4 py-2 rounded-xl text-white ${filtro === "PENDENTE"
-                                ? "bg-yellow-500"
-                                : "bg-gray-400"
-                                }`}
-                        >
-                            Pendentes
-                        </button>
-
-                        <button
-                            onClick={() =>
-                                setFiltro("PARCIAL")
-                            }
-                            className={`px-4 py-2 rounded-xl text-white ${filtro === "PARCIAL"
-                                ? "bg-blue-600"
-                                : "bg-gray-400"
-                                }`}
-                        >
-                            Parciais
-                        </button>
-
-                        <button
-                            onClick={() =>
-                                setFiltro("PAGO")
-                            }
-                            className={`px-4 py-2 rounded-xl text-white ${filtro === "PAGO"
-                                ? "bg-green-600"
-                                : "bg-gray-400"
-                                }`}
-                        >
-                            Pagos
-                        </button>
-
-                        <button
-                            onClick={() =>
-                                setFiltro("ATRASADO")
-                            }
-                            className={`px-4 py-2 rounded-xl text-white ${filtro === "ATRASADO"
-                                ? "bg-red-600"
-                                : "bg-gray-400"
-                                }`}
-                        >
-                            Atrasados
-                        </button>
-
-                    </div>
-
-                </div>
-
-            </div>
-
-            {/* TABELA */}
-
-            <div className="bg-white rounded-3xl shadow-md overflow-hidden">
-
-                <div className="overflow-x-auto">
-
-                    <table className="w-full min-w-[1400px]">
-
-                        <thead className="bg-gray-100">
-
+                        {loading && (
                             <tr>
-
-                                <th className="p-4 text-left">
-
-                                    Cliente
-
-                                </th>
-
-                                <th className="p-4 text-left">
-
-                                    Parcela
-
-                                </th>
-
-                                <th className="p-4 text-left">
-
-                                    Valor
-
-                                </th>
-
-                                <th className="p-4 text-left">
-
-                                    Pago
-
-                                </th>
-
-                                <th className="p-4 text-left">
-
-                                    Saldo
-
-                                </th>
-
-                                <th className="p-4 text-left">
-
-                                    Vencimento
-
-                                </th>
-
-                                <th className="p-4 text-left">
-
-                                    Status
-
-                                </th>
-
-                                <th className="p-4 text-left">
-
-                                    Ações
-
-                                </th>
-
+                                <td
+                                    colSpan={8}
+                                    className="p-6 text-center"
+                                >
+                                    Carregando...
+                                </td>
                             </tr>
+                        )}
 
-                        </thead>
+                        {!loading && contas.length === 0 && (
+                            <tr>
+                                <td
+                                    colSpan={8}
+                                    className="p-6 text-center"
+                                >
+                                    Nenhuma conta encontrada.
+                                </td>
+                            </tr>
+                        )}
 
-                        <tbody>
+                        {!loading && contas.map((conta) => {
 
-                            {contasFiltradas.map((c) => (
+                            const cliente = conta.clientes?.[0];
 
+                            return (
                                 <tr
-                                    key={c.id}
+                                    key={conta.id}
                                     className="border-t"
                                 >
 
-                                    {/* CLIENTE */}
+                                    <td className="p-4">
+                                        {cliente?.nome || "-"}
+                                    </td>
+
+                                    <td className="p-4">
+                                        {cliente?.telefone || "-"}
+                                    </td>
+
+                                    <td className="p-4">
+                                        {conta.parcela}/{conta.total_parcelas}
+                                    </td>
+
+                                    <td className="p-4 font-semibold">
+                                        {formatarMoeda(conta.valor)}
+                                    </td>
+
+                                    <td className="p-4">
+                                        {formatarData(conta.data_vencimento)}
+                                    </td>
+
+                                    <td className="p-4">
+                                        {formatarData(conta.data_pagamento)}
+                                    </td>
 
                                     <td className="p-4">
 
-                                        <div>
-
-                                            <p className="font-medium">
-
-                                                {c.clientes?.nome}
-
-                                            </p>
-
-                                            <p className="text-sm text-gray-500">
-
-                                                {c.clientes?.telefone}
-
-                                            </p>
-
-                                        </div>
+                                        <span
+                                            className={`px-3 py-1 rounded-full text-sm font-medium
+                                            ${conta.status === "Pago"
+                                                    ? "bg-green-100 text-green-700"
+                                                    : "bg-red-100 text-red-700"
+                                                }`}
+                                        >
+                                            {conta.status}
+                                        </span>
 
                                     </td>
-
-                                    {/* PARCELA */}
 
                                     <td className="p-4">
 
-                                        {c.parcela}/
-                                        {c.total_parcelas}
-
-                                    </td>
-
-                                    {/* VALOR */}
-
-                                    <td className="p-4 font-medium">
-
-                                        R$ {Number(
-                                            c.valor
-                                        ).toFixed(2)}
-
-                                    </td>
-
-                                    {/* PAGO */}
-
-                                    <td className="p-4 text-green-600 font-medium">
-
-                                        R$ {Number(
-                                            c.valor_pago || 0
-                                        ).toFixed(2)}
-
-                                    </td>
-
-                                    {/* SALDO */}
-
-                                    <td className="p-4 text-orange-500 font-medium">
-
-                                        R$ {Number(
-                                            c.saldo_restante ||
-                                            c.valor
-                                        ).toFixed(2)}
-
-                                    </td>
-
-                                    {/* VENCIMENTO */}
-
-                                    <td className="p-4">
-
-                                        {new Date(
-                                            c.data_vencimento
-                                        ).toLocaleDateString(
-                                            "pt-BR"
+                                        {conta.status !== "Pago" && (
+                                            <button
+                                                onClick={() => marcarComoPago(conta.id)}
+                                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"
+                                            >
+                                                Receber
+                                            </button>
                                         )}
 
                                     </td>
 
-                                    {/* STATUS */}
-
-                                    <td className="p-4">
-
-                                        {c.status ===
-                                            "PAGO" && (
-
-                                                <span className="bg-green-600 text-white px-3 py-1 rounded-full text-xs">
-
-                                                    Pago
-
-                                                </span>
-                                            )}
-
-                                        {c.status ===
-                                            "PENDENTE" && (
-
-                                                <span className="bg-yellow-500 text-white px-3 py-1 rounded-full text-xs">
-
-                                                    Pendente
-
-                                                </span>
-                                            )}
-
-                                        {c.status ===
-                                            "PARCIAL" && (
-
-                                                <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-xs">
-
-                                                    Parcial
-
-                                                </span>
-                                            )}
-
-                                        {c.status ===
-                                            "ATRASADO" && (
-
-                                                <span className="bg-red-600 text-white px-3 py-1 rounded-full text-xs">
-
-                                                    Atrasado
-
-                                                </span>
-                                            )}
-
-                                    </td>
-
-                                    {/* AÇÕES */}
-
-                                    <td className="p-4">
-
-                                        <div className="flex gap-2">
-
-                                            {c.status !==
-                                                "PAGO" && (
-
-                                                    <button
-                                                        onClick={() =>
-                                                            receberPagamento(c)
-                                                        }
-                                                        className="bg-green-600 text-white px-4 py-2 rounded-xl"
-                                                    >
-                                                        Receber
-                                                    </button>
-                                                )}
-
-                                            <a
-                                                href={`https://wa.me/55${c.clientes?.telefone?.replace(/\D/g, "")}`}
-                                                target="_blank"
-                                                className="bg-blue-600 text-white px-4 py-2 rounded-xl"
-                                            >
-                                                Cobrar
-                                            </a>
-
-                                        </div>
-
-                                    </td>
-
                                 </tr>
+                            );
+                        })}
 
-                            ))}
+                    </tbody>
 
-                        </tbody>
-
-                    </table>
-
-                </div>
+                </table>
 
             </div>
 
