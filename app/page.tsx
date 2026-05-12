@@ -1,894 +1,515 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import { verificarAuth } from "@/lib/protect";
 
-interface Cliente {
-    id: string;
-    nome: string;
-    telefone?: string;
+interface ContaReceber {
+    id: number;
+    valor: number;
+    parcela: number;
+    total_parcelas: number;
+    data_vencimento: string;
+    status: string;
+    clientes?: {
+        nome: string;
+    };
 }
 
-interface Produto {
-    id: string;
-    nome: string;
-    preco: number;
-    estoque: number;
-}
-
-interface ItemVenda {
-    produto_id: string;
-    produto_nome: string;
-    quantidade: number;
-    valor_unitario: number;
-    subtotal: number;
-}
-
-export default function VendasPage() {
+export default function Home() {
 
     const router = useRouter();
 
-    const [clientes, setClientes] =
-        useState<Cliente[]>([]);
-
-    const [produtos, setProdutos] =
-        useState<Produto[]>([]);
-
-    const [itens, setItens] =
-        useState<ItemVenda[]>([]);
-
     const [loading, setLoading] =
-        useState(false);
+        useState(true);
 
-    // =========================
-    // FORM
-    // =========================
+    const [dashboard, setDashboard] =
+        useState({
 
-    const [clienteId, setClienteId] =
-        useState("");
+            recebidoHoje: 0,
 
-    const [formaPagamento,
-        setFormaPagamento] =
-        useState("PIX");
+            recebidoMes: 0,
 
-    const [parcelas,
-        setParcelas] =
-        useState(1);
+            aReceber: 0,
 
-    const [entrada,
-        setEntrada] =
-        useState(0);
+            vencidas: 0,
 
-    const [desconto,
-        setDesconto] =
-        useState(0);
+            vencemHoje: 0,
 
-    const [primeiroVencimento,
-        setPrimeiroVencimento] =
-        useState(
-            new Date()
-                .toISOString()
-                .split("T")[0]
-        );
+            inadimplentes: 0,
 
-    const [observacoes,
-        setObservacoes] =
-        useState("");
+            estoqueBaixo: 0,
 
-    // =========================
-    // ITEM TEMP
-    // =========================
+        });
 
-    const [produtoSelecionado,
-        setProdutoSelecionado] =
-        useState("");
-
-    const [quantidade,
-        setQuantidade] =
-        useState(1);
-
-    // =========================
-    // INIT
-    // =========================
+    const [proximasCobrancas,
+        setProximasCobrancas] =
+        useState<ContaReceber[]>([]);
 
     useEffect(() => {
 
         verificarAuth(router);
 
-        carregarDados();
+        iniciarDashboard();
 
     }, [router]);
 
-    async function carregarDados() {
+    async function iniciarDashboard() {
 
-        const { data: clientesData } =
+        setLoading(true);
+
+        await atualizarParcelasAtrasadas();
+
+        await carregarDashboard();
+
+        setLoading(false);
+    }
+
+    async function atualizarParcelasAtrasadas() {
+
+        const hoje = new Date();
+
+        hoje.setHours(0, 0, 0, 0);
+
+        await supabase
+            .from("contas_receber")
+            .update({
+                status: "ATRASADO",
+            })
+            .lt(
+                "data_vencimento",
+                hoje.toISOString()
+            )
+            .eq("status", "PENDENTE");
+    }
+
+    async function carregarDashboard() {
+
+        // =========================
+        // DATAS
+        // =========================
+
+        const hojeInicio = new Date();
+
+        hojeInicio.setHours(0, 0, 0, 0);
+
+        const hojeFim = new Date();
+
+        hojeFim.setHours(23, 59, 59, 999);
+
+        const inicioMes = new Date(
+            new Date().getFullYear(),
+            new Date().getMonth(),
+            1
+        );
+
+        // =========================
+        // RECEBIDO HOJE
+        // =========================
+
+        const { data: recebidoHoje } =
             await supabase
-                .from("clientes")
-                .select("id, nome, telefone")
-                .order("nome");
-
-        const { data: produtosData } =
-            await supabase
-                .from("produtos")
-                .select("id, nome, preco, estoque")
-                .gt("estoque", 0)
-                .order("nome");
-
-        setClientes(clientesData || []);
-
-        setProdutos(produtosData || []);
-    }
-
-    // =========================
-    // ADD ITEM
-    // =========================
-
-    function adicionarItem() {
-
-        if (!produtoSelecionado) {
-
-            alert("Selecione um produto");
-
-            return;
-        }
-
-        const produto = produtos.find(
-            (p) => p.id === produtoSelecionado
-        );
-
-        if (!produto) return;
-
-        if (quantidade <= 0) {
-
-            alert("Quantidade inválida");
-
-            return;
-        }
-
-        if (quantidade > produto.estoque) {
-
-            alert("Estoque insuficiente");
-
-            return;
-        }
-
-        const itemExistente = itens.find(
-            (i) => i.produto_id === produto.id
-        );
-
-        if (itemExistente) {
-
-            const novosItens = itens.map((i) => {
-
-                if (i.produto_id === produto.id) {
-
-                    const novaQuantidade =
-                        i.quantidade + quantidade;
-
-                    return {
-                        ...i,
-                        quantidade: novaQuantidade,
-                        subtotal:
-                            novaQuantidade *
-                            i.valor_unitario,
-                    };
-                }
-
-                return i;
-            });
-
-            setItens(novosItens);
-
-        } else {
-
-            const novoItem: ItemVenda = {
-
-                produto_id: produto.id,
-
-                produto_nome: produto.nome,
-
-                quantidade,
-
-                valor_unitario:
-                    Number(produto.preco),
-
-                subtotal:
-                    quantidade *
-                    Number(produto.preco),
-            };
-
-            setItens([
-                ...itens,
-                novoItem,
-            ]);
-        }
-
-        setProdutoSelecionado("");
-
-        setQuantidade(1);
-    }
-
-    // =========================
-    // REMOVE ITEM
-    // =========================
-
-    function removerItem(index: number) {
-
-        const novosItens =
-            itens.filter(
-                (_, i) => i !== index
-            );
-
-        setItens(novosItens);
-    }
-
-    // =========================
-    // TOTALS
-    // =========================
-
-    const subtotal = useMemo(() => {
-
-        return itens.reduce(
-            (acc, item) =>
-                acc + item.subtotal,
-            0
-        );
-
-    }, [itens]);
-
-    const totalFinal = useMemo(() => {
-
-        return (
-            subtotal -
-            desconto -
-            entrada
-        );
-
-    }, [subtotal, desconto, entrada]);
-
-    const valorParcela = useMemo(() => {
-
-        if (parcelas <= 0) return 0;
-
-        return totalFinal / parcelas;
-
-    }, [totalFinal, parcelas]);
-
-    // =========================
-    // FINALIZAR VENDA
-    // =========================
-
-    async function finalizarVenda() {
-
-        try {
-
-            setLoading(true);
-
-            if (!clienteId) {
-
-                alert("Selecione um cliente");
-
-                return;
-            }
-
-            if (itens.length === 0) {
-
-                alert("Adicione itens");
-
-                return;
-            }
-
-            // =========================
-            // CRIA VENDA
-            // =========================
-
-            const { data: venda,
-                error: vendaError } =
-                await supabase
-                    .from("vendas")
-                    .insert([
-                        {
-                            cliente_id:
-                                clienteId,
-
-                            subtotal,
-
-                            desconto,
-
-                            entrada,
-
-                            valor_total:
-                                subtotal - desconto,
-
-                            valor_restante:
-                                totalFinal,
-
-                            forma_pagamento:
-                                formaPagamento,
-
-                            parcelas,
-
-                            status:
-                                parcelas > 1
-                                    ? "PENDENTE"
-                                    : "PAGO",
-
-                            observacoes,
-                        },
-                    ])
-                    .select()
-                    .single();
-
-            if (vendaError)
-                throw vendaError;
-
-            // =========================
-            // INSERE ITENS
-            // =========================
-
-            const itensVenda =
-                itens.map((item) => ({
-
-                    venda_id:
-                        venda.id,
-
-                    produto_id:
-                        item.produto_id,
-
-                    produto_nome:
-                        item.produto_nome,
-
-                    quantidade:
-                        item.quantidade,
-
-                    valor_unitario:
-                        item.valor_unitario,
-
-                    subtotal:
-                        item.subtotal,
-                }));
-
-            const { error: itensError } =
-                await supabase
-                    .from("vendas_itens")
-                    .insert(itensVenda);
-
-            if (itensError)
-                throw itensError;
-
-            // =========================
-            // BAIXA ESTOQUE
-            // =========================
-
-            for (const item of itens) {
-
-                const produto = produtos.find(
-                    (p) =>
-                        p.id ===
-                        item.produto_id
+                .from("contas_receber")
+                .select("valor")
+                .eq("status", "PAGO")
+                .gte(
+                    "data_pagamento",
+                    hojeInicio.toISOString()
+                )
+                .lte(
+                    "data_pagamento",
+                    hojeFim.toISOString()
                 );
 
-                if (!produto) continue;
+        const totalRecebidoHoje =
+            recebidoHoje?.reduce(
+                (acc, item) =>
+                    acc + Number(item.valor),
+                0
+            ) || 0;
 
-                const novoEstoque =
-                    produto.estoque -
-                    item.quantidade;
+        // =========================
+        // RECEBIDO MÊS
+        // =========================
 
-                await supabase
-                    .from("produtos")
-                    .update({
-                        estoque:
-                            novoEstoque,
-                    })
-                    .eq(
-                        "id",
-                        item.produto_id
-                    );
-            }
+        const { data: recebidoMes } =
+            await supabase
+                .from("contas_receber")
+                .select("valor")
+                .eq("status", "PAGO")
+                .gte(
+                    "data_pagamento",
+                    inicioMes.toISOString()
+                );
 
-            // =========================
-            // ENTRADA
-            // =========================
+        const totalRecebidoMes =
+            recebidoMes?.reduce(
+                (acc, item) =>
+                    acc + Number(item.valor),
+                0
+            ) || 0;
 
-            if (entrada > 0) {
+        // =========================
+        // TOTAL A RECEBER
+        // =========================
 
-                await supabase
-                    .from("recebimentos")
-                    .insert([
-                        {
-                            venda_id:
-                                venda.id,
+        const { data: pendentes } =
+            await supabase
+                .from("contas_receber")
+                .select("valor")
+                .in("status", [
+                    "PENDENTE",
+                    "ATRASADO"
+                ]);
 
-                            cliente_id:
-                                clienteId,
+        const totalAReceber =
+            pendentes?.reduce(
+                (acc, item) =>
+                    acc + Number(item.valor),
+                0
+            ) || 0;
 
-                            valor:
-                                entrada,
+        // =========================
+        // CONTAS VENCIDAS
+        // =========================
 
-                            forma_pagamento:
-                                "PIX",
-                        },
-                    ]);
-            }
+        const { data: vencidas } =
+            await supabase
+                .from("contas_receber")
+                .select("*")
+                .eq("status", "ATRASADO");
 
-            // =========================
-            // GERA PARCELAS
-            // =========================
+        // =========================
+        // VENCEM HOJE
+        // =========================
 
-            if (totalFinal > 0) {
+        const hojeString =
+            hojeInicio
+                .toISOString()
+                .split("T")[0];
 
-                const parcelasInsert = [];
+        const { data: vencemHoje } =
+            await supabase
+                .from("contas_receber")
+                .select("*")
+                .eq("status", "PENDENTE")
+                .eq(
+                    "data_vencimento",
+                    hojeString
+                );
 
-                for (
-                    let i = 1;
-                    i <= parcelas;
-                    i++
-                ) {
+        // =========================
+        // CLIENTES INADIMPLENTES
+        // =========================
 
-                    const vencimento =
-                        new Date(
-                            primeiroVencimento
-                        );
+        const { data: inadimplentes } =
+            await supabase
+                .from("clientes")
+                .select("*")
+                .eq("inadimplente", true);
 
-                    vencimento.setMonth(
-                        vencimento.getMonth() +
-                        (i - 1)
-                    );
+        // =========================
+        // ESTOQUE BAIXO
+        // =========================
 
-                    parcelasInsert.push({
+        const { data: estoqueBaixo } =
+            await supabase
+                .from("produtos")
+                .select("*")
+                .lte("estoque", 5);
 
-                        venda_id:
-                            venda.id,
+        // =========================
+        // PRÓXIMAS COBRANÇAS
+        // =========================
 
-                        cliente_id:
-                            clienteId,
+        const { data: cobrancas } =
+            await supabase
+                .from("contas_receber")
+                .select(`
+                    *,
+                    clientes(nome)
+                `)
+                .in("status", [
+                    "PENDENTE",
+                    "ATRASADO"
+                ])
+                .order(
+                    "data_vencimento",
+                    {
+                        ascending: true,
+                    }
+                )
+                .limit(10);
 
-                        valor:
-                            valorParcela,
+        setProximasCobrancas(
+            cobrancas || []
+        );
 
-                        valor_pago: 0,
+        // =========================
+        // SET DASHBOARD
+        // =========================
 
-                        saldo_restante:
-                            valorParcela,
+        setDashboard({
 
-                        parcela: i,
+            recebidoHoje:
+                totalRecebidoHoje,
 
-                        total_parcelas:
-                            parcelas,
+            recebidoMes:
+                totalRecebidoMes,
 
-                        data_vencimento:
-                            vencimento
-                                .toISOString()
-                                .split("T")[0],
+            aReceber:
+                totalAReceber,
 
-                        status:
-                            "PENDENTE",
-                    });
-                }
+            vencidas:
+                vencidas?.length || 0,
 
-                await supabase
-                    .from("contas_receber")
-                    .insert(parcelasInsert);
-            }
+            vencemHoje:
+                vencemHoje?.length || 0,
 
-            // =========================
-            // RESET
-            // =========================
+            inadimplentes:
+                inadimplentes?.length || 0,
 
-            setItens([]);
+            estoqueBaixo:
+                estoqueBaixo?.length || 0,
 
-            setClienteId("");
+        });
+    }
 
-            setEntrada(0);
+    const cards = [
 
-            setDesconto(0);
+        {
+            titulo: "Recebido Hoje",
+            valor:
+                `R$ ${dashboard.recebidoHoje.toFixed(2)}`,
+            icone: "💰",
+        },
 
-            setParcelas(1);
+        {
+            titulo: "Recebido no Mês",
+            valor:
+                `R$ ${dashboard.recebidoMes.toFixed(2)}`,
+            icone: "📈",
+        },
 
-            setObservacoes("");
+        {
+            titulo: "Total a Receber",
+            valor:
+                `R$ ${dashboard.aReceber.toFixed(2)}`,
+            icone: "🟠",
+        },
 
-            alert("Venda finalizada");
+        {
+            titulo: "Contas Atrasadas",
+            valor:
+                dashboard.vencidas,
+            icone: "🔴",
+        },
 
-        } catch (error) {
+        {
+            titulo: "Vencem Hoje",
+            valor:
+                dashboard.vencemHoje,
+            icone: "📅",
+        },
 
-            console.log(error);
+        {
+            titulo: "Clientes Inadimplentes",
+            valor:
+                dashboard.inadimplentes,
+            icone: "🚫",
+        },
 
-            alert("Erro ao finalizar venda");
+        {
+            titulo: "Estoque Baixo",
+            valor:
+                dashboard.estoqueBaixo,
+            icone: "📦",
+        },
 
-        } finally {
+    ];
 
-            setLoading(false);
-        }
+    if (loading) {
+
+        return (
+
+            <div className="min-h-screen flex items-center justify-center">
+
+                <p className="text-xl">
+                    Carregando dashboard...
+                </p>
+
+            </div>
+        );
     }
 
     return (
 
         <div className="min-h-screen bg-gray-100 p-4 md:p-8">
 
-            <div className="flex items-center justify-between mb-8">
+            {/* HEADER */}
+
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-10">
 
                 <div>
 
                     <h1 className="text-3xl md:text-4xl font-bold">
-                        Nova Venda
+                        Leport's ERP
                     </h1>
 
                     <p className="text-gray-500 mt-2">
-                        Cadastro de vendas e geração automática de parcelas
+                        Dashboard Financeiro
                     </p>
+
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+
+                    <Link
+                        href="/clientes"
+                        className="bg-white px-5 py-3 rounded-2xl shadow-md hover:shadow-lg transition"
+                    >
+                        Clientes
+                    </Link>
+
+                    <Link
+                        href="/produtos"
+                        className="bg-white px-5 py-3 rounded-2xl shadow-md hover:shadow-lg transition"
+                    >
+                        Produtos
+                    </Link>
+
+                    <Link
+                        href="/vendas"
+                        className="bg-white px-5 py-3 rounded-2xl shadow-md hover:shadow-lg transition"
+                    >
+                        Vendas
+                    </Link>
+
+                    <Link
+                        href="/financeiro"
+                        className="bg-white px-5 py-3 rounded-2xl shadow-md hover:shadow-lg transition"
+                    >
+                        Financeiro
+                    </Link>
 
                 </div>
 
             </div>
 
-            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            {/* CARDS */}
 
-                {/* ESQUERDA */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
 
-                <div className="xl:col-span-2 space-y-6">
+                {cards.map((card, index) => (
 
-                    {/* DADOS VENDA */}
+                    <div
+                        key={index}
+                        className="bg-white p-6 rounded-3xl shadow-md"
+                    >
 
-                    <div className="bg-white rounded-3xl shadow-md p-6">
+                        <div className="flex items-center justify-between mb-4">
 
-                        <h2 className="text-xl font-bold mb-6">
-                            Dados da venda
-                        </h2>
+                            <h2 className="text-gray-500 text-sm">
+                                {card.titulo}
+                            </h2>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-                            <select
-                                value={clienteId}
-                                onChange={(e) =>
-                                    setClienteId(
-                                        e.target.value
-                                    )
-                                }
-                                className="border p-3 rounded-xl"
-                            >
-
-                                <option value="">
-                                    Selecione o cliente
-                                </option>
-
-                                {clientes.map((c) => (
-
-                                    <option
-                                        key={c.id}
-                                        value={c.id}
-                                    >
-                                        {c.nome}
-                                    </option>
-
-                                ))}
-
-                            </select>
-
-                            <select
-                                value={formaPagamento}
-                                onChange={(e) =>
-                                    setFormaPagamento(
-                                        e.target.value
-                                    )
-                                }
-                                className="border p-3 rounded-xl"
-                            >
-
-                                <option value="PIX">
-                                    PIX
-                                </option>
-
-                                <option value="DINHEIRO">
-                                    Dinheiro
-                                </option>
-
-                                <option value="BOLETO">
-                                    Boleto
-                                </option>
-
-                            </select>
-
-                            <input
-                                type="number"
-                                placeholder="Entrada"
-                                value={entrada}
-                                onChange={(e) =>
-                                    setEntrada(
-                                        Number(
-                                            e.target.value
-                                        )
-                                    )
-                                }
-                                className="border p-3 rounded-xl"
-                            />
-
-                            <input
-                                type="number"
-                                placeholder="Desconto"
-                                value={desconto}
-                                onChange={(e) =>
-                                    setDesconto(
-                                        Number(
-                                            e.target.value
-                                        )
-                                    )
-                                }
-                                className="border p-3 rounded-xl"
-                            />
-
-                            <input
-                                type="number"
-                                placeholder="Parcelas"
-                                min={1}
-                                value={parcelas}
-                                onChange={(e) =>
-                                    setParcelas(
-                                        Number(
-                                            e.target.value
-                                        )
-                                    )
-                                }
-                                className="border p-3 rounded-xl"
-                            />
-
-                            <input
-                                type="date"
-                                value={primeiroVencimento}
-                                onChange={(e) =>
-                                    setPrimeiroVencimento(
-                                        e.target.value
-                                    )
-                                }
-                                className="border p-3 rounded-xl"
-                            />
+                            <span className="text-3xl">
+                                {card.icone}
+                            </span>
 
                         </div>
 
-                        <textarea
-                            placeholder="Observações"
-                            value={observacoes}
-                            onChange={(e) =>
-                                setObservacoes(
-                                    e.target.value
-                                )
-                            }
-                            className="border p-3 rounded-xl w-full mt-4 h-28"
-                        />
+                        <p className="text-3xl font-bold">
+                            {card.valor}
+                        </p>
 
                     </div>
 
-                    {/* ITENS */}
+                ))}
 
-                    <div className="bg-white rounded-3xl shadow-md p-6">
+            </div>
 
-                        <h2 className="text-xl font-bold mb-6">
-                            Itens da venda
-                        </h2>
+            {/* PRÓXIMAS COBRANÇAS */}
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+            <div className="bg-white p-6 rounded-3xl shadow-md">
 
-                            <select
-                                value={produtoSelecionado}
-                                onChange={(e) =>
-                                    setProdutoSelecionado(
-                                        e.target.value
-                                    )
-                                }
-                                className="border p-3 rounded-xl"
-                            >
+                <div className="flex items-center justify-between mb-6">
 
-                                <option value="">
-                                    Produto
-                                </option>
+                    <h2 className="text-2xl font-bold">
+                        Próximas cobranças
+                    </h2>
 
-                                {produtos.map((p) => (
-
-                                    <option
-                                        key={p.id}
-                                        value={p.id}
-                                    >
-                                        {p.nome} | Estoque: {p.estoque}
-                                    </option>
-
-                                ))}
-
-                            </select>
-
-                            <input
-                                type="number"
-                                min={1}
-                                value={quantidade}
-                                onChange={(e) =>
-                                    setQuantidade(
-                                        Number(
-                                            e.target.value
-                                        )
-                                    )
-                                }
-                                className="border p-3 rounded-xl"
-                            />
-
-                            <button
-                                onClick={adicionarItem}
-                                className="bg-black text-white rounded-xl px-4 py-3"
-                            >
-                                Adicionar
-                            </button>
-
-                        </div>
-
-                        <div className="overflow-x-auto">
-
-                            <table className="w-full min-w-[800px]">
-
-                                <thead className="bg-gray-100">
-
-                                    <tr>
-
-                                        <th className="p-4 text-left">
-                                            Produto
-                                        </th>
-
-                                        <th className="p-4 text-left">
-                                            Quantidade
-                                        </th>
-
-                                        <th className="p-4 text-left">
-                                            Valor Unitário
-                                        </th>
-
-                                        <th className="p-4 text-left">
-                                            Subtotal
-                                        </th>
-
-                                        <th className="p-4 text-left">
-                                            Ações
-                                        </th>
-
-                                    </tr>
-
-                                </thead>
-
-                                <tbody>
-
-                                    {itens.map((item, index) => (
-
-                                        <tr
-                                            key={index}
-                                            className="border-t"
-                                        >
-
-                                            <td className="p-4">
-                                                {item.produto_nome}
-                                            </td>
-
-                                            <td className="p-4">
-                                                {item.quantidade}
-                                            </td>
-
-                                            <td className="p-4">
-                                                R$ {item.valor_unitario.toFixed(2)}
-                                            </td>
-
-                                            <td className="p-4 font-bold">
-                                                R$ {item.subtotal.toFixed(2)}
-                                            </td>
-
-                                            <td className="p-4">
-
-                                                <button
-                                                    onClick={() =>
-                                                        removerItem(index)
-                                                    }
-                                                    className="bg-red-600 text-white px-4 py-2 rounded-lg"
-                                                >
-                                                    Remover
-                                                </button>
-
-                                            </td>
-
-                                        </tr>
-
-                                    ))}
-
-                                </tbody>
-
-                            </table>
-
-                        </div>
-
-                    </div>
+                    <Link
+                        href="/financeiro/cobrancas"
+                        className="text-blue-600 font-medium"
+                    >
+                        Ver todas
+                    </Link>
 
                 </div>
 
-                {/* RESUMO */}
+                <div className="space-y-4">
 
-                <div>
+                    {proximasCobrancas.length === 0 && (
 
-                    <div className="bg-white rounded-3xl shadow-md p-6 sticky top-4">
+                        <p className="text-gray-500">
+                            Nenhuma cobrança encontrada.
+                        </p>
 
-                        <h2 className="text-2xl font-bold mb-6">
-                            Resumo da venda
-                        </h2>
+                    )}
 
-                        <div className="space-y-4">
+                    {proximasCobrancas.map((item) => (
 
-                            <div className="flex justify-between">
+                        <div
+                            key={item.id}
+                            className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-4"
+                        >
 
-                                <span>
-                                    Subtotal
-                                </span>
+                            <div>
 
-                                <strong>
-                                    R$ {subtotal.toFixed(2)}
-                                </strong>
-
-                            </div>
-
-                            <div className="flex justify-between">
-
-                                <span>
-                                    Desconto
-                                </span>
-
-                                <strong>
-                                    R$ {desconto.toFixed(2)}
-                                </strong>
-
-                            </div>
-
-                            <div className="flex justify-between">
-
-                                <span>
-                                    Entrada
-                                </span>
-
-                                <strong>
-                                    R$ {entrada.toFixed(2)}
-                                </strong>
-
-                            </div>
-
-                            <div className="border-t pt-4 flex justify-between text-xl font-bold">
-
-                                <span>
-                                    Total restante
-                                </span>
-
-                                <span>
-                                    R$ {totalFinal.toFixed(2)}
-                                </span>
-
-                            </div>
-
-                            <div className="bg-gray-100 rounded-2xl p-4 mt-4">
-
-                                <p className="text-sm text-gray-500 mb-2">
-                                    Parcelamento
+                                <p className="font-semibold">
+                                    {item.clientes?.nome}
                                 </p>
 
-                                <p className="text-lg font-bold">
-                                    {parcelas}x de
-                                    R$ {valorParcela.toFixed(2)}
+                                <p className="text-sm text-gray-500">
+
+                                    Parcela {item.parcela}
+
+                                    {item.total_parcelas
+                                        ? `/${item.total_parcelas}`
+                                        : ""}
+
                                 </p>
 
                             </div>
 
-                            <button
-                                onClick={finalizarVenda}
-                                disabled={loading}
-                                className="w-full bg-green-600 hover:bg-green-700 text-white py-4 rounded-2xl font-bold text-lg mt-6"
-                            >
-                                {loading
-                                    ? "Finalizando..."
-                                    : "Finalizar venda"}
-                            </button>
+                            <div className="mt-2 md:mt-0 text-right">
+
+                                <p className="font-bold text-lg">
+
+                                    R$ {Number(item.valor).toFixed(2)}
+
+                                </p>
+
+                                <p className="text-sm text-gray-500">
+
+                                    Vence em:
+
+                                    {" "}
+
+                                    {new Date(
+                                        item.data_vencimento
+                                    ).toLocaleDateString("pt-BR")}
+
+                                </p>
+
+                            </div>
 
                         </div>
 
-                    </div>
+                    ))}
 
                 </div>
 
