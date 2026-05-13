@@ -1,400 +1,141 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { verificarAuth } from "@/lib/protect";
 
-interface ContaReceber {
-    id: number;
-    valor: number;
-    parcela: number;
-    total_parcelas: number;
-    data_vencimento: string;
-    status: string;
-    clientes?: {
-        nome: string;
-    };
-}
+export default function DashboardPage() {
 
-export default function Home() {
+    const [totalVendas, setTotalVendas] = useState(0);
+    const [totalClientes, setTotalClientes] = useState(0);
+    const [totalProdutos, setTotalProdutos] = useState(0);
+    const [totalReceber, setTotalReceber] = useState(0);
 
-    const router = useRouter();
+    const [contasHoje, setContasHoje] = useState<any[]>([]);
+    const [totalHoje, setTotalHoje] = useState(0);
 
-    const [loading, setLoading] =
-        useState(true);
-
-    const [dashboard, setDashboard] =
-        useState({
-
-            recebidoHoje: 0,
-
-            recebidoMes: 0,
-
-            aReceber: 0,
-
-            vencidas: 0,
-
-            vencemHoje: 0,
-
-            inadimplentes: 0,
-
-            estoqueBaixo: 0,
-
-        });
-
-    const [proximasCobrancas,
-        setProximasCobrancas] =
-        useState<ContaReceber[]>([]);
-
-    useEffect(() => {
-
-        verificarAuth(router);
-
-        iniciarDashboard();
-
-    }, [router]);
-
-    async function iniciarDashboard() {
-
-        setLoading(true);
-
-        await atualizarParcelasAtrasadas();
-
-        await carregarDashboard();
-
-        setLoading(false);
-    }
-
-    async function atualizarParcelasAtrasadas() {
-
-        const hoje = new Date();
-
-        hoje.setHours(0, 0, 0, 0);
-
-        await supabase
-            .from("contas_receber")
-            .update({
-                status: "ATRASADO",
-            })
-            .lt(
-                "data_vencimento",
-                hoje.toISOString()
-            )
-            .eq("status", "PENDENTE");
-    }
+    const [ultimasVendas, setUltimasVendas] = useState<any[]>([]);
 
     async function carregarDashboard() {
 
-        // =========================
-        // DATAS
-        // =========================
+        // TOTAL VENDAS
+        const { data: vendas } = await supabase
+            .from("vendas")
+            .select("total");
 
-        const hojeInicio = new Date();
-
-        hojeInicio.setHours(0, 0, 0, 0);
-
-        const hojeFim = new Date();
-
-        hojeFim.setHours(23, 59, 59, 999);
-
-        const inicioMes = new Date(
-            new Date().getFullYear(),
-            new Date().getMonth(),
-            1
+        const totalVendaValor = (vendas || []).reduce(
+            (acc, item) => acc + Number(item.total || 0),
+            0
         );
 
-        // =========================
-        // RECEBIDO HOJE
-        // =========================
+        setTotalVendas(totalVendaValor);
 
-        const { data: recebidoHoje } =
-            await supabase
-                .from("contas_receber")
-                .select("valor")
-                .eq("status", "PAGO")
-                .gte(
-                    "data_pagamento",
-                    hojeInicio.toISOString()
-                )
-                .lte(
-                    "data_pagamento",
-                    hojeFim.toISOString()
-                );
+        // TOTAL CLIENTES
+        const { count: clientesCount } = await supabase
+            .from("clientes")
+            .select("*", { count: "exact", head: true });
 
-        const totalRecebidoHoje =
-            recebidoHoje?.reduce(
-                (acc, item) =>
-                    acc + Number(item.valor),
-                0
-            ) || 0;
+        setTotalClientes(clientesCount || 0);
 
-        // =========================
-        // RECEBIDO MÊS
-        // =========================
+        // TOTAL PRODUTOS
+        const { count: produtosCount } = await supabase
+            .from("produtos")
+            .select("*", { count: "exact", head: true });
 
-        const { data: recebidoMes } =
-            await supabase
-                .from("contas_receber")
-                .select("valor")
-                .eq("status", "PAGO")
-                .gte(
-                    "data_pagamento",
-                    inicioMes.toISOString()
-                );
+        setTotalProdutos(produtosCount || 0);
 
-        const totalRecebidoMes =
-            recebidoMes?.reduce(
-                (acc, item) =>
-                    acc + Number(item.valor),
-                0
-            ) || 0;
+        // CONTAS A RECEBER
+        const { data: contas } = await supabase
+            .from("contas_receber")
+            .select("saldo_restante, status")
+            .neq("status", "Pago");
 
-        // =========================
-        // TOTAL A RECEBER
-        // =========================
-
-        const { data: pendentes } =
-            await supabase
-                .from("contas_receber")
-                .select("valor")
-                .in("status", [
-                    "PENDENTE",
-                    "ATRASADO"
-                ]);
-
-        const totalAReceber =
-            pendentes?.reduce(
-                (acc, item) =>
-                    acc + Number(item.valor),
-                0
-            ) || 0;
-
-        // =========================
-        // CONTAS VENCIDAS
-        // =========================
-
-        const { data: vencidas } =
-            await supabase
-                .from("contas_receber")
-                .select("*")
-                .eq("status", "ATRASADO");
-
-        // =========================
-        // VENCEM HOJE
-        // =========================
-
-        const hojeString =
-            hojeInicio
-                .toISOString()
-                .split("T")[0];
-
-        const { data: vencemHoje } =
-            await supabase
-                .from("contas_receber")
-                .select("*")
-                .eq("status", "PENDENTE")
-                .eq(
-                    "data_vencimento",
-                    hojeString
-                );
-
-        // =========================
-        // CLIENTES INADIMPLENTES
-        // =========================
-
-        const { data: inadimplentes } =
-            await supabase
-                .from("clientes")
-                .select("*")
-                .eq("inadimplente", true);
-
-        // =========================
-        // ESTOQUE BAIXO
-        // =========================
-
-        const { data: estoqueBaixo } =
-            await supabase
-                .from("produtos")
-                .select("*")
-                .lte("estoque", 5);
-
-        // =========================
-        // PRÓXIMAS COBRANÇAS
-        // =========================
-
-        const { data: cobrancas } =
-            await supabase
-                .from("contas_receber")
-                .select(`
-                    *,
-                    clientes(nome)
-                `)
-                .in("status", [
-                    "PENDENTE",
-                    "ATRASADO"
-                ])
-                .order(
-                    "data_vencimento",
-                    {
-                        ascending: true,
-                    }
-                )
-                .limit(10);
-
-        setProximasCobrancas(
-            cobrancas || []
+        const totalReceberValor = (contas || []).reduce(
+            (acc, item) => acc + Number(item.saldo_restante || 0),
+            0
         );
 
-        // =========================
-        // SET DASHBOARD
-        // =========================
+        setTotalReceber(totalReceberValor);
 
-        setDashboard({
+        // ÚLTIMAS VENDAS
+        const { data: vendasRecentes } = await supabase
+            .from("vendas")
+            .select(`
+                *,
+                clientes (
+                    nome
+                )
+            `)
+            .order("created_at", { ascending: false })
+            .limit(5);
 
-            recebidoHoje:
-                totalRecebidoHoje,
+        setUltimasVendas(vendasRecentes || []);
+    }
 
-            recebidoMes:
-                totalRecebidoMes,
+    async function carregarRecebimentosHoje() {
 
-            aReceber:
-                totalAReceber,
+        const hoje = new Date().toISOString().split("T")[0];
 
-            vencidas:
-                vencidas?.length || 0,
+        const { data, error } = await supabase
+            .from("contas_receber")
+            .select(`
+                *,
+                clientes (
+                    nome
+                )
+            `)
+            .eq("data_vencimento", hoje)
+            .neq("status", "Pago");
 
-            vencemHoje:
-                vencemHoje?.length || 0,
+        if (error) {
+            console.error(error);
+            return;
+        }
 
-            inadimplentes:
-                inadimplentes?.length || 0,
+        setContasHoje(data || []);
 
-            estoqueBaixo:
-                estoqueBaixo?.length || 0,
+        const total = (data || []).reduce(
+            (acc, item) => acc + Number(item.valor || 0),
+            0
+        );
 
+        setTotalHoje(total);
+    }
+
+    function formatarMoeda(valor: number) {
+
+        return valor.toLocaleString("pt-BR", {
+            style: "currency",
+            currency: "BRL",
         });
     }
 
-    const cards = [
+    function formatarData(data: string) {
 
-        {
-            titulo: "Recebido Hoje",
-            valor:
-                `R$ ${dashboard.recebidoHoje.toFixed(2)}`,
-            icone: "💰",
-        },
-
-        {
-            titulo: "Recebido no Mês",
-            valor:
-                `R$ ${dashboard.recebidoMes.toFixed(2)}`,
-            icone: "📈",
-        },
-
-        {
-            titulo: "Total a Receber",
-            valor:
-                `R$ ${dashboard.aReceber.toFixed(2)}`,
-            icone: "🟠",
-        },
-
-        {
-            titulo: "Contas Atrasadas",
-            valor:
-                dashboard.vencidas,
-            icone: "🔴",
-        },
-
-        {
-            titulo: "Vencem Hoje",
-            valor:
-                dashboard.vencemHoje,
-            icone: "📅",
-        },
-
-        {
-            titulo: "Clientes Inadimplentes",
-            valor:
-                dashboard.inadimplentes,
-            icone: "🚫",
-        },
-
-        {
-            titulo: "Estoque Baixo",
-            valor:
-                dashboard.estoqueBaixo,
-            icone: "📦",
-        },
-
-    ];
-
-    if (loading) {
-
-        return (
-
-            <div className="min-h-screen flex items-center justify-center">
-
-                <p className="text-xl">
-                    Carregando dashboard...
-                </p>
-
-            </div>
-        );
+        return new Date(data).toLocaleDateString("pt-BR");
     }
+
+    useEffect(() => {
+
+        carregarDashboard();
+        carregarRecebimentosHoje();
+
+    }, []);
 
     return (
 
-        <div className="min-h-screen bg-gray-100 p-4 md:p-8">
+        <div className="p-8 bg-gray-100 min-h-screen">
 
             {/* HEADER */}
 
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-10">
+            <div className="mb-8">
 
-                <div>
+                <h1 className="text-4xl font-bold">
+                    Dashboard
+                </h1>
 
-                    <h1 className="text-3xl md:text-4xl font-bold">
-                        Leport's ERP
-                    </h1>
-
-                    <p className="text-gray-500 mt-2">
-                        Dashboard Financeiro
-                    </p>
-
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-
-                    <Link
-                        href="/clientes"
-                        className="bg-white px-5 py-3 rounded-2xl shadow-md hover:shadow-lg transition"
-                    >
-                        Clientes
-                    </Link>
-
-                    <Link
-                        href="/produtos"
-                        className="bg-white px-5 py-3 rounded-2xl shadow-md hover:shadow-lg transition"
-                    >
-                        Produtos
-                    </Link>
-
-                    <Link
-                        href="/vendas"
-                        className="bg-white px-5 py-3 rounded-2xl shadow-md hover:shadow-lg transition"
-                    >
-                        Vendas
-                    </Link>
-
-                    <Link
-                        href="/financeiro"
-                        className="bg-white px-5 py-3 rounded-2xl shadow-md hover:shadow-lg transition"
-                    >
-                        Financeiro
-                    </Link>
-
-                </div>
+                <p className="text-gray-500 mt-2">
+                    Visão geral do sistema
+                </p>
 
             </div>
 
@@ -402,119 +143,253 @@ export default function Home() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 mb-8">
 
-                {cards.map((card, index) => (
+                <div className="bg-white p-6 rounded-2xl shadow-md">
 
-                    <div
-                        key={index}
-                        className="bg-white p-6 rounded-3xl shadow-md"
-                    >
+                    <p className="text-gray-500 text-sm">
+                        Faturamento Total
+                    </p>
 
-                        <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-3xl font-bold mt-2 text-green-600">
+                        {formatarMoeda(totalVendas)}
+                    </h2>
 
-                            <h2 className="text-gray-500 text-sm">
-                                {card.titulo}
-                            </h2>
+                </div>
 
-                            <span className="text-3xl">
-                                {card.icone}
-                            </span>
+                <div className="bg-white p-6 rounded-2xl shadow-md">
 
-                        </div>
+                    <p className="text-gray-500 text-sm">
+                        Clientes
+                    </p>
 
-                        <p className="text-3xl font-bold">
-                            {card.valor}
+                    <h2 className="text-3xl font-bold mt-2 text-blue-600">
+                        {totalClientes}
+                    </h2>
+
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl shadow-md">
+
+                    <p className="text-gray-500 text-sm">
+                        Produtos
+                    </p>
+
+                    <h2 className="text-3xl font-bold mt-2 text-purple-600">
+                        {totalProdutos}
+                    </h2>
+
+                </div>
+
+                <div className="bg-white p-6 rounded-2xl shadow-md">
+
+                    <p className="text-gray-500 text-sm">
+                        Contas a Receber
+                    </p>
+
+                    <h2 className="text-3xl font-bold mt-2 text-orange-600">
+                        {formatarMoeda(totalReceber)}
+                    </h2>
+
+                </div>
+
+            </div>
+
+            {/* ALERTA RECEBIMENTOS */}
+
+            <div className="bg-yellow-100 border-l-4 border-yellow-500 p-6 rounded-2xl shadow-md mb-8">
+
+                <div className="flex items-center justify-between">
+
+                    <div>
+
+                        <h2 className="text-2xl font-bold text-yellow-700">
+                            Recebimentos de Hoje
+                        </h2>
+
+                        <p className="text-yellow-700 mt-2">
+
+                            {contasHoje.length} cobrança(s) pendente(s)
+
                         </p>
 
                     </div>
 
-                ))}
+                    <div className="text-right">
+
+                        <p className="text-3xl font-bold text-yellow-700">
+
+                            {formatarMoeda(totalHoje)}
+
+                        </p>
+
+                    </div>
+
+                </div>
 
             </div>
 
-            {/* PRÓXIMAS COBRANÇAS */}
+            {/* COBRANÇAS */}
 
-            <div className="bg-white p-6 rounded-3xl shadow-md">
+            <div className="bg-white rounded-2xl shadow-md p-6 mb-8">
 
                 <div className="flex items-center justify-between mb-6">
 
                     <h2 className="text-2xl font-bold">
-                        Próximas cobranças
+                        Cobranças do Dia
                     </h2>
 
-                    <Link
-                        href="/financeiro/cobrancas"
-                        className="text-blue-600 font-medium"
-                    >
-                        Ver todas
-                    </Link>
-
                 </div>
 
-                <div className="space-y-4">
+                {contasHoje.length === 0 ? (
 
-                    {proximasCobrancas.length === 0 && (
+                    <div className="text-center py-10 text-gray-500">
 
-                        <p className="text-gray-500">
-                            Nenhuma cobrança encontrada.
-                        </p>
+                        Nenhuma cobrança para hoje
 
-                    )}
+                    </div>
 
-                    {proximasCobrancas.map((item) => (
+                ) : (
 
-                        <div
-                            key={item.id}
-                            className="flex flex-col md:flex-row md:items-center md:justify-between border-b pb-4"
-                        >
+                    <div className="space-y-4">
 
-                            <div>
+                        {contasHoje.map((conta) => (
 
-                                <p className="font-semibold">
-                                    {item.clientes?.nome}
-                                </p>
+                            <div
+                                key={conta.id}
+                                className="flex items-center justify-between border rounded-xl p-4 hover:bg-gray-50"
+                            >
 
-                                <p className="text-sm text-gray-500">
+                                <div>
 
-                                    Parcela {item.parcela}
+                                    <p className="font-bold">
+                                        {conta.clientes?.nome}
+                                    </p>
 
-                                    {item.total_parcelas
-                                        ? `/${item.total_parcelas}`
-                                        : ""}
+                                    <p className="text-sm text-gray-500">
 
-                                </p>
+                                        Parcela {conta.parcela}/{conta.total_parcelas}
+
+                                    </p>
+
+                                </div>
+
+                                <div className="text-right">
+
+                                    <p className="font-bold text-green-600 text-lg">
+
+                                        {formatarMoeda(conta.valor)}
+
+                                    </p>
+
+                                </div>
 
                             </div>
 
-                            <div className="mt-2 md:mt-0 text-right">
+                        ))}
 
-                                <p className="font-bold text-lg">
+                    </div>
 
-                                    R$ {Number(item.valor).toFixed(2)}
+                )}
 
-                                </p>
+            </div>
 
-                                <p className="text-sm text-gray-500">
+            {/* HISTÓRICO DE VENDAS */}
 
-                                    Vence em:
+            <div className="bg-white rounded-2xl shadow-md p-6">
 
-                                    {" "}
+                <div className="flex items-center justify-between mb-6">
 
-                                    {new Date(
-                                        item.data_vencimento
-                                    ).toLocaleDateString("pt-BR")}
-
-                                </p>
-
-                            </div>
-
-                        </div>
-
-                    ))}
+                    <h2 className="text-2xl font-bold">
+                        Últimas Vendas
+                    </h2>
 
                 </div>
+
+                {ultimasVendas.length === 0 ? (
+
+                    <div className="text-center py-10 text-gray-500">
+
+                        Nenhuma venda encontrada
+
+                    </div>
+
+                ) : (
+
+                    <div className="overflow-auto">
+
+                        <table className="w-full">
+
+                            <thead className="bg-gray-100">
+
+                                <tr>
+
+                                    <th className="p-4 text-left">
+                                        Cliente
+                                    </th>
+
+                                    <th className="p-4 text-left">
+                                        Valor
+                                    </th>
+
+                                    <th className="p-4 text-left">
+                                        Pagamento
+                                    </th>
+
+                                    <th className="p-4 text-left">
+                                        Data
+                                    </th>
+
+                                </tr>
+
+                            </thead>
+
+                            <tbody>
+
+                                {ultimasVendas.map((venda) => (
+
+                                    <tr
+                                        key={venda.id}
+                                        className="border-t hover:bg-gray-50"
+                                    >
+
+                                        <td className="p-4">
+
+                                            {venda.clientes?.nome || "Cliente"}
+
+                                        </td>
+
+                                        <td className="p-4 font-semibold text-green-600">
+
+                                            {formatarMoeda(venda.total)}
+
+                                        </td>
+
+                                        <td className="p-4">
+
+                                            {venda.forma_pagamento}
+
+                                        </td>
+
+                                        <td className="p-4">
+
+                                            {formatarData(venda.created_at)}
+
+                                        </td>
+
+                                    </tr>
+
+                                ))}
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                )}
 
             </div>
 
         </div>
+
     );
 }

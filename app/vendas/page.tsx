@@ -1,121 +1,147 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
-interface Cliente {
+type Cliente = {
     id: string;
     nome: string;
-}
+};
 
-interface Produto {
+type Produto = {
     id: string;
     nome: string;
     preco: number;
     estoque: number;
-}
+};
 
-interface ItemVenda {
-    produto_id: string;
+type ItemVenda = {
+    id: string;
     nome: string;
-    quantidade: number;
     preco: number;
-}
+    estoque: number;
+    quantidade: number;
+};
 
 export default function VendasPage() {
 
     const [clientes, setClientes] = useState<Cliente[]>([]);
     const [produtos, setProdutos] = useState<Produto[]>([]);
-    const [itens, setItens] = useState<ItemVenda[]>([]);
 
     const [clienteId, setClienteId] = useState("");
-    const [produtoId, setProdutoId] = useState("");
+
+    const [produtoSelecionado, setProdutoSelecionado] = useState("");
+
     const [quantidade, setQuantidade] = useState(1);
 
-    const [desconto, setDesconto] = useState("");
-    const [entrada, setEntrada] = useState("");
+    const [itens, setItens] = useState<ItemVenda[]>([]);
+
+    const [desconto, setDesconto] = useState(0);
+
+    const [entrada, setEntrada] = useState(0);
 
     const [parcelas, setParcelas] = useState(1);
-    const [formaPagamento, setFormaPagamento] = useState("DINHEIRO");
+
+    const [formaPagamento, setFormaPagamento] = useState("PIX");
+
     const [observacoes, setObservacoes] = useState("");
+
+    const [primeiroVencimento, setPrimeiroVencimento] = useState("");
 
     const [loading, setLoading] = useState(false);
 
-    // =====================================
-    // FORMATAR MOEDA
-    // =====================================
+    // =========================
+    // CARREGAR CLIENTES
+    // =========================
 
-    function formatMoney(value: string) {
+    async function carregarClientes() {
 
-        const onlyNumbers = value.replace(/\D/g, "");
+        const { data } = await supabase
+            .from("clientes")
+            .select("*")
+            .order("nome");
 
-        return (Number(onlyNumbers) / 100).toLocaleString("pt-BR", {
-            minimumFractionDigits: 2,
-        });
+        setClientes(data || []);
     }
 
-    // =====================================
-    // CARREGAR DADOS
-    // =====================================
+    // =========================
+    // CARREGAR PRODUTOS
+    // =========================
 
-    async function carregarDados() {
+    async function carregarProdutos() {
 
-        const { data: clientesData } = await supabase
-            .from("clientes")
-            .select("id, nome")
-            .order("nome");
-
-        const { data: produtosData } = await supabase
+        const { data } = await supabase
             .from("produtos")
-            .select("id, nome, preco, estoque")
+            .select("*")
             .order("nome");
 
-        setClientes(clientesData || []);
-        setProdutos(produtosData || []);
+        setProdutos(data || []);
     }
 
     useEffect(() => {
-        carregarDados();
+
+        carregarClientes();
+
+        carregarProdutos();
+
     }, []);
 
-    // =====================================
+    // =========================
     // ADICIONAR ITEM
-    // =====================================
+    // =========================
 
     function adicionarItem() {
 
-        if (!produtoId) {
+        if (!produtoSelecionado) {
+
             alert("Selecione um produto");
+
             return;
         }
 
-        const produto = produtos.find((p) => p.id === produtoId);
+        const produto = produtos.find(
+            (p) => p.id === produtoSelecionado
+        );
 
         if (!produto) return;
 
         if (quantidade <= 0) {
+
             alert("Quantidade inválida");
+
             return;
         }
 
         if (quantidade > produto.estoque) {
+
             alert("Estoque insuficiente");
+
             return;
         }
 
         const itemExistente = itens.find(
-            (item) => item.produto_id === produto.id
+            (item) => item.id === produto.id
         );
 
         if (itemExistente) {
 
             const novosItens = itens.map((item) => {
 
-                if (item.produto_id === produto.id) {
+                if (item.id === produto.id) {
+
+                    const novaQuantidade =
+                        item.quantidade + quantidade;
+
+                    if (novaQuantidade > produto.estoque) {
+
+                        alert("Estoque insuficiente");
+
+                        return item;
+                    }
 
                     return {
                         ...item,
-                        quantidade: item.quantidade + quantidade,
+                        quantidade: novaQuantidade,
                     };
                 }
 
@@ -129,50 +155,62 @@ export default function VendasPage() {
             setItens([
                 ...itens,
                 {
-                    produto_id: produto.id,
+                    id: produto.id,
                     nome: produto.nome,
+                    preco: Number(produto.preco),
+                    estoque: produto.estoque,
                     quantidade,
-                    preco: produto.preco,
                 },
             ]);
         }
 
-        setProdutoId("");
+        setProdutoSelecionado("");
+
         setQuantidade(1);
     }
 
-    // =====================================
+    // =========================
     // REMOVER ITEM
-    // =====================================
+    // =========================
 
-    function removerItem(produto_id: string) {
+    function removerItem(id: string) {
 
         setItens(
-            itens.filter((item) => item.produto_id !== produto_id)
+            itens.filter((item) => item.id !== id)
         );
     }
 
-    // =====================================
-    // TOTAL
-    // =====================================
+    // =========================
+    // TOTAIS
+    // =========================
 
-    const subtotal = itens.reduce((acc, item) => {
-        return acc + (item.quantidade * item.preco);
-    }, 0);
+    const subtotal = useMemo(() => {
 
-    const descontoValor =
-        Number(desconto.replace(/\D/g, "")) / 100 || 0;
+        return itens.reduce((acc, item) => {
 
-    const entradaValor =
-        Number(entrada.replace(/\D/g, "")) / 100 || 0;
+            return acc + (
+                item.preco * item.quantidade
+            );
 
-    const totalFinal = subtotal - descontoValor;
+        }, 0);
 
-    const restante = totalFinal - entradaValor;
+    }, [itens]);
 
-    // =====================================
+    const total = useMemo(() => {
+
+        return subtotal - desconto;
+
+    }, [subtotal, desconto]);
+
+    const saldoRestante = useMemo(() => {
+
+        return total - entrada;
+
+    }, [total, entrada]);
+
+    // =========================
     // FINALIZAR VENDA
-    // =====================================
+    // =========================
 
     async function finalizarVenda() {
 
@@ -181,98 +219,93 @@ export default function VendasPage() {
             setLoading(true);
 
             if (!clienteId) {
+
                 alert("Selecione um cliente");
+
                 return;
             }
 
             if (itens.length === 0) {
+
                 alert("Adicione produtos");
+
                 return;
             }
 
             // =========================
-            // TOTAIS
+            // CRIAR VENDA
             // =========================
 
-            const subtotal = itens.reduce((acc, item) => {
-                return acc + (item.quantidade * item.preco);
-            }, 0);
-
-            const total =
-                subtotal -
-                desconto;
-
-            const saldoRestante =
-                total -
-                entrada;
-
-            // =========================
-            // SALVA VENDA
-            // =========================
-
-            const { data: venda, error: vendaError } = await supabase
-                .from("vendas")
-                .insert([
-                    {
-                        cliente_id: clienteId,
-                        subtotal,
-                        desconto,
-                        total,
-                        entrada,
-                        saldo_restante: saldoRestante,
-                        parcelas,
-                        forma_pagamento: formaPagamento,
-                        observacoes,
-                        primeiro_vencimento: primeiroVencimento,
-                    }
-                ])
-                .select()
-                .single();
+            const { data: venda, error: vendaError } =
+                await supabase
+                    .from("vendas")
+                    .insert([
+                        {
+                            cliente_id: clienteId,
+                            subtotal,
+                            desconto,
+                            total,
+                            entrada,
+                            saldo_restante: saldoRestante,
+                            parcelas,
+                            forma_pagamento: formaPagamento,
+                            observacoes,
+                            primeiro_vencimento:
+                                primeiroVencimento,
+                        },
+                    ])
+                    .select()
+                    .single();
 
             if (vendaError) {
+
                 throw vendaError;
             }
 
             // =========================
-            // SALVA ITENS
+            // ITENS VENDA
             // =========================
 
             for (const item of itens) {
 
                 const valorTotal =
-                    item.quantidade * item.preco;
+                    item.preco * item.quantidade;
 
-                const { error: itemError } = await supabase
-                    .from("itens_venda")
-                    .insert([
-                        {
-                            venda_id: venda.id,
-                            produto_id: item.id,
-                            quantidade: item.quantidade,
-                            valor_unitario: item.preco,
-                            valor_total: valorTotal,
-                        }
-                    ]);
+                const { error: itemError } =
+                    await supabase
+                        .from("itens_venda")
+                        .insert([
+                            {
+                                venda_id: venda.id,
+                                produto_id: item.id,
+                                quantidade: item.quantidade,
+                                valor_unitario: item.preco,
+                                valor_total: valorTotal,
+                            },
+                        ]);
 
                 if (itemError) {
+
                     throw itemError;
                 }
 
                 // =========================
-                // BAIXA ESTOQUE
+                // BAIXAR ESTOQUE
                 // =========================
 
                 const novoEstoque =
                     item.estoque - item.quantidade;
 
-                const { error: estoqueError } = await supabase
-                    .from("produtos")
-                    .update({
-                        estoque: novoEstoque
-                    })
-                    .eq("id", item.id);
+                const { error: estoqueError } =
+                    await supabase
+                        .from("produtos")
+                        .update({
+                            estoque: novoEstoque,
+                        })
+                        .eq("id", item.id);
 
                 if (estoqueError) {
+
                     throw estoqueError;
                 }
             }
@@ -286,7 +319,11 @@ export default function VendasPage() {
                 const valorParcela =
                     saldoRestante / parcelas;
 
-                for (let i = 1; i <= parcelas; i++) {
+                for (
+                    let i = 1;
+                    i <= parcelas;
+                    i++
+                ) {
 
                     const vencimento =
                         new Date(primeiroVencimento);
@@ -295,25 +332,31 @@ export default function VendasPage() {
                         vencimento.getMonth() + (i - 1)
                     );
 
-                    const { error: contaError } = await supabase
-                        .from("contas_receber")
-                        .insert([
-                            {
-                                cliente_id: clienteId,
-                                venda_id: venda.id,
-                                valor: valorParcela,
-                                valor_pago: 0,
-                                saldo_restante: valorParcela,
-                                parcela: i,
-                                total_parcelas: parcelas,
-                                data_vencimento:
-                                    vencimento.toISOString(),
-                                status: "Pendente",
-                                forma_pagamento: formaPagamento,
-                            }
-                        ]);
+                    const { error: contaError } =
+                        await supabase
+                            .from("contas_receber")
+                            .insert([
+                                {
+                                    cliente_id: clienteId,
+                                    venda_id: venda.id,
+                                    valor: valorParcela,
+                                    valor_pago: 0,
+                                    saldo_restante:
+                                        valorParcela,
+                                    parcela: i,
+                                    total_parcelas:
+                                        parcelas,
+                                    data_vencimento:
+                                        vencimento
+                                            .toISOString(),
+                                    status: "Pendente",
+                                    forma_pagamento:
+                                        formaPagamento,
+                                },
+                            ]);
 
                     if (contaError) {
+
                         throw contaError;
                     }
                 }
@@ -322,20 +365,24 @@ export default function VendasPage() {
             alert("Venda finalizada com sucesso");
 
             // =========================
-            // LIMPA TELA
+            // RESET
             // =========================
-
-            setItens([]);
 
             setClienteId("");
 
-            setEntrada(0);
+            setItens([]);
 
             setDesconto(0);
 
+            setEntrada(0);
+
             setParcelas(1);
 
+            setFormaPagamento("PIX");
+
             setObservacoes("");
+
+            setPrimeiroVencimento("");
 
         } catch (error: any) {
 
@@ -352,206 +399,93 @@ export default function VendasPage() {
         }
     }
 
-            // =====================================
-            // CRIAR VENDA
-            // =====================================
-
-            const { data: venda, error: vendaError } = await supabase
-                .from("vendas")
-                .insert([
-                    {
-                        cliente_id: clienteId,
-                        subtotal,
-                        desconto: descontoValor,
-                        entrada: entradaValor,
-                        total: totalFinal,
-                        parcelas,
-                        forma_pagamento: formaPagamento,
-                        observacoes,
-                    },
-                ])
-                .select()
-                .single();
-
-            if (vendaError) {
-                throw vendaError;
-            }
-
-            // =====================================
-            // ITENS DA VENDA
-            // =====================================
-
-            const itensVenda = itens.map((item) => ({
-                venda_id: venda.id,
-                produto_id: item.produto_id,
-                quantidade: item.quantidade,
-                preco_unitario: item.preco,
-                subtotal: item.quantidade * item.preco,
-            }));
-
-            const { error: itensError } = await supabase
-                .from("itens_venda")
-                .insert(itensVenda);
-
-            if (itensError) {
-                throw itensError;
-            }
-
-            // =====================================
-            // ATUALIZAR ESTOQUE
-            // =====================================
-
-            for (const item of itens) {
-
-                const produto = produtos.find(
-                    (p) => p.id === item.produto_id
-                );
-
-                if (!produto) continue;
-
-                const novoEstoque =
-                    produto.estoque - item.quantidade;
-
-                const { error } = await supabase
-                    .from("produtos")
-                    .update({
-                        estoque: novoEstoque,
-                    })
-                    .eq("id", item.produto_id);
-
-                if (error) {
-                    throw error;
-                }
-            }
-
-            // =====================================
-            // CONTAS A RECEBER
-            // =====================================
-
-            if (restante > 0) {
-
-                const valorParcela = restante / parcelas;
-
-                const contas = [];
-
-                for (let i = 1; i <= parcelas; i++) {
-
-                    const vencimento = new Date();
-
-                    vencimento.setMonth(vencimento.getMonth() + i);
-
-                    contas.push({
-                        cliente_id: clienteId,
-                        venda_id: venda.id,
-                        valor: valorParcela,
-                        valor_pago: 0,
-                        saldo_restante: valorParcela,
-                        parcela: i,
-                        total_parcelas: parcelas,
-                        data_vencimento: vencimento
-                            .toISOString()
-                            .split("T")[0],
-                        status: "PENDENTE",
-                        forma_pagamento: formaPagamento,
-                    });
-                }
-
-                const { error } = await supabase
-                    .from("contas_receber")
-                    .insert(contas);
-
-                if (error) {
-                    throw error;
-                }
-            }
-
-            // =====================================
-            // LIMPAR
-            // =====================================
-
-            setItens([]);
-            setClienteId("");
-            setProdutoId("");
-            setQuantidade(1);
-            setDesconto("");
-            setEntrada("");
-            setParcelas(1);
-            setObservacoes("");
-
-            alert("Venda finalizada com sucesso");
-
-        } catch (error: any) {
-
-            console.error(error);
-
-            alert(
-                error.message || "Erro ao finalizar venda"
-            );
-
-        } finally {
-
-            setLoading(false);
-        }
-    }
-
     return (
 
         <div className="p-10 bg-gray-100 min-h-screen">
 
             <h1 className="text-4xl font-bold mb-8">
-                Vendas
+                Nova Venda
             </h1>
 
-            <div className="bg-white p-6 rounded-2xl shadow-md mb-6">
+            <div className="bg-white p-6 rounded-2xl shadow-md">
 
-                <div className="grid grid-cols-2 gap-4">
+                {/* CLIENTE */}
+
+                <div className="mb-6">
+
+                    <label className="block mb-2 font-semibold">
+                        Cliente
+                    </label>
 
                     <select
                         value={clienteId}
-                        onChange={(e) => setClienteId(e.target.value)}
-                        className="border p-3 rounded-xl"
+                        onChange={(e) =>
+                            setClienteId(e.target.value)
+                        }
+                        className="w-full border p-3 rounded-xl"
                     >
+
                         <option value="">
-                            Selecione o cliente
+                            Selecione
                         </option>
 
                         {clientes.map((cliente) => (
+
                             <option
                                 key={cliente.id}
                                 value={cliente.id}
                             >
                                 {cliente.nome}
                             </option>
+
                         ))}
+
                     </select>
 
+                </div>
+
+                {/* PRODUTOS */}
+
+                <div className="grid grid-cols-3 gap-4 mb-6">
+
                     <select
-                        value={produtoId}
-                        onChange={(e) => setProdutoId(e.target.value)}
+                        value={produtoSelecionado}
+                        onChange={(e) =>
+                            setProdutoSelecionado(
+                                e.target.value
+                            )
+                        }
                         className="border p-3 rounded-xl"
                     >
+
                         <option value="">
-                            Selecione o produto
+                            Produto
                         </option>
 
                         {produtos.map((produto) => (
+
                             <option
                                 key={produto.id}
                                 value={produto.id}
                             >
-                                {produto.nome} — Estoque:
+                                {produto.nome} - Estoque:
+                                {" "}
                                 {produto.estoque}
                             </option>
+
                         ))}
+
                     </select>
 
                     <input
                         type="number"
+                        placeholder="Quantidade"
                         value={quantidade}
                         onChange={(e) =>
-                            setQuantidade(Number(e.target.value))
+                            setQuantidade(
+                                Number(e.target.value)
+                            )
                         }
-                        placeholder="Quantidade"
                         className="border p-3 rounded-xl"
                     />
 
@@ -559,187 +493,231 @@ export default function VendasPage() {
                         onClick={adicionarItem}
                         className="bg-black text-white rounded-xl"
                     >
-                        Adicionar Item
+                        Adicionar
                     </button>
 
                 </div>
 
-            </div>
+                {/* ITENS */}
 
-            <div className="bg-white rounded-2xl shadow-md p-6 mb-6">
+                <div className="mb-6">
 
-                <table className="w-full">
+                    <table className="w-full">
 
-                    <thead>
+                        <thead className="bg-gray-100">
 
-                        <tr className="border-b">
-                            <th className="p-3 text-left">
-                                Produto
-                            </th>
-                            <th className="p-3 text-left">
-                                Quantidade
-                            </th>
-                            <th className="p-3 text-left">
-                                Preço
-                            </th>
-                            <th className="p-3 text-left">
-                                Subtotal
-                            </th>
-                            <th className="p-3 text-left">
-                                Ações
-                            </th>
-                        </tr>
+                            <tr>
 
-                    </thead>
+                                <th className="p-3 text-left">
+                                    Produto
+                                </th>
 
-                    <tbody>
+                                <th className="p-3 text-left">
+                                    Quantidade
+                                </th>
 
-                        {itens.map((item) => (
+                                <th className="p-3 text-left">
+                                    Preço
+                                </th>
 
-                            <tr
-                                key={item.produto_id}
-                                className="border-b"
-                            >
+                                <th className="p-3 text-left">
+                                    Total
+                                </th>
 
-                                <td className="p-3">
-                                    {item.nome}
-                                </td>
-
-                                <td className="p-3">
-                                    {item.quantidade}
-                                </td>
-
-                                <td className="p-3">
-                                    R$ {item.preco.toFixed(2)}
-                                </td>
-
-                                <td className="p-3">
-                                    R$ {(item.preco * item.quantidade).toFixed(2)}
-                                </td>
-
-                                <td className="p-3">
-
-                                    <button
-                                        onClick={() =>
-                                            removerItem(item.produto_id)
-                                        }
-                                        className="bg-red-600 text-white px-3 py-1 rounded-lg"
-                                    >
-                                        Remover
-                                    </button>
-
-                                </td>
+                                <th className="p-3 text-left">
+                                    Ações
+                                </th>
 
                             </tr>
 
-                        ))}
+                        </thead>
 
-                    </tbody>
+                        <tbody>
 
-                </table>
+                            {itens.map((item) => (
 
-            </div>
+                                <tr
+                                    key={item.id}
+                                    className="border-t"
+                                >
 
-            <div className="bg-white p-6 rounded-2xl shadow-md">
+                                    <td className="p-3">
+                                        {item.nome}
+                                    </td>
 
-                <div className="grid grid-cols-2 gap-4">
+                                    <td className="p-3">
+                                        {item.quantidade}
+                                    </td>
+
+                                    <td className="p-3">
+                                        R$ {item.preco.toFixed(2)}
+                                    </td>
+
+                                    <td className="p-3">
+                                        R$ {(item.preco * item.quantidade).toFixed(2)}
+                                    </td>
+
+                                    <td className="p-3">
+
+                                        <button
+                                            onClick={() =>
+                                                removerItem(item.id)
+                                            }
+                                            className="bg-red-600 text-white px-4 py-2 rounded-lg"
+                                        >
+                                            Remover
+                                        </button>
+
+                                    </td>
+
+                                </tr>
+
+                            ))}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+                {/* FINANCEIRO */}
+
+                <div className="grid grid-cols-2 gap-4 mb-6">
 
                     <input
+                        type="number"
                         placeholder="Desconto"
                         value={desconto}
                         onChange={(e) =>
-                            setDesconto(formatMoney(e.target.value))
-                        }
-                        className="border p-3 rounded-xl"
-                    />
-
-                    <input
-                        placeholder="Entrada"
-                        value={entrada}
-                        onChange={(e) =>
-                            setEntrada(formatMoney(e.target.value))
+                            setDesconto(
+                                Number(e.target.value)
+                            )
                         }
                         className="border p-3 rounded-xl"
                     />
 
                     <input
                         type="number"
-                        min={1}
-                        value={parcelas}
+                        placeholder="Entrada"
+                        value={entrada}
                         onChange={(e) =>
-                            setParcelas(Number(e.target.value))
+                            setEntrada(
+                                Number(e.target.value)
+                            )
                         }
                         className="border p-3 rounded-xl"
                     />
 
+                    <input
+                        type="number"
+                        placeholder="Parcelas"
+                        value={parcelas}
+                        onChange={(e) =>
+                            setParcelas(
+                                Number(e.target.value)
+                            )
+                        }
+                        className="border p-3 rounded-xl"
+                    />
+
+                    <input
+                        type="date"
+                        value={primeiroVencimento}
+                        onChange={(e) =>
+                            setPrimeiroVencimento(
+                                e.target.value
+                            )
+                        }
+                        className="border p-3 rounded-xl"
+                    />
+
+                </div>
+
+                <div className="mb-6">
+
                     <select
                         value={formaPagamento}
                         onChange={(e) =>
-                            setFormaPagamento(e.target.value)
+                            setFormaPagamento(
+                                e.target.value
+                            )
                         }
-                        className="border p-3 rounded-xl"
+                        className="w-full border p-3 rounded-xl"
                     >
-                        <option value="DINHEIRO">
-                            Dinheiro
-                        </option>
 
-                        <option value="PIX">
+                        <option>
                             PIX
                         </option>
 
-                        <option value="CARTAO">
+                        <option>
                             Cartão
                         </option>
 
-                        <option value="BOLETO">
+                        <option>
+                            Dinheiro
+                        </option>
+
+                        <option>
                             Boleto
                         </option>
+
                     </select>
 
                 </div>
 
-                <textarea
-                    placeholder="Observações"
-                    value={observacoes}
-                    onChange={(e) =>
-                        setObservacoes(e.target.value)
-                    }
-                    className="border p-3 rounded-xl w-full mt-4"
-                />
+                <div className="mb-6">
 
-                <div className="mt-6 space-y-2 text-lg">
+                    <textarea
+                        placeholder="Observações"
+                        value={observacoes}
+                        onChange={(e) =>
+                            setObservacoes(
+                                e.target.value
+                            )
+                        }
+                        className="w-full border p-3 rounded-xl"
+                    />
 
-                    <p>
-                        <strong>Subtotal:</strong> R${" "}
-                        {subtotal.toFixed(2)}
-                    </p>
+                </div>
 
-                    <p>
-                        <strong>Desconto:</strong> R${" "}
-                        {descontoValor.toFixed(2)}
-                    </p>
+                {/* RESUMO */}
 
-                    <p>
-                        <strong>Total:</strong> R${" "}
-                        {totalFinal.toFixed(2)}
-                    </p>
+                <div className="bg-gray-100 p-6 rounded-2xl mb-6">
 
-                    <p>
-                        <strong>Entrada:</strong> R${" "}
-                        {entradaValor.toFixed(2)}
-                    </p>
+                    <div className="flex justify-between mb-2">
+                        <span>Subtotal</span>
+                        <strong>
+                            R$ {subtotal.toFixed(2)}
+                        </strong>
+                    </div>
 
-                    <p>
-                        <strong>Restante:</strong> R${" "}
-                        {restante.toFixed(2)}
-                    </p>
+                    <div className="flex justify-between mb-2">
+                        <span>Desconto</span>
+                        <strong>
+                            R$ {desconto.toFixed(2)}
+                        </strong>
+                    </div>
+
+                    <div className="flex justify-between mb-2">
+                        <span>Total</span>
+                        <strong>
+                            R$ {total.toFixed(2)}
+                        </strong>
+                    </div>
+
+                    <div className="flex justify-between">
+                        <span>Saldo Restante</span>
+                        <strong>
+                            R$ {saldoRestante.toFixed(2)}
+                        </strong>
+                    </div>
 
                 </div>
 
                 <button
                     onClick={finalizarVenda}
                     disabled={loading}
-                    className="mt-6 bg-green-600 text-white px-6 py-3 rounded-xl"
+                    className="w-full bg-green-600 text-white py-4 rounded-2xl text-lg font-bold"
                 >
                     {loading
                         ? "Finalizando..."
