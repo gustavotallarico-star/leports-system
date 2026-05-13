@@ -1,5 +1,6 @@
 import "./globals.css";
 import Sidebar from "@/components/layout/sidebar";
+import Header from "@/components/layout/header";
 
 export const metadata = {
     title: "Leport's ERP",
@@ -13,19 +14,34 @@ export default function RootLayout({
 }) {
 
     return (
+
         <html lang="pt-BR">
 
-            <body>
+            <body className="bg-gray-100">
 
-                <div className="flex">
+                <div className="flex h-screen overflow-hidden">
 
+                    {/* SIDEBAR */}
                     <Sidebar />
 
-                    <main className="flex-1">
+                    {/* CONTEÚDO */}
+                    <div className="flex flex-col flex-1 overflow-hidden">
 
-                        {children}
+                        {/* HEADER */}
+                        <Header />
 
-                    </main>
+                        {/* PÁGINAS */}
+                        <main className="flex-1 overflow-y-auto p-6">
+
+                            <div className="max-w-7xl mx-auto">
+
+                                {children}
+
+                            </div>
+
+                        </main>
+
+                    </div>
 
                 </div>
 
