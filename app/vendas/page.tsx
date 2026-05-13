@@ -186,9 +186,171 @@ export default function VendasPage() {
             }
 
             if (itens.length === 0) {
-                alert("Adicione itens");
+                alert("Adicione produtos");
                 return;
             }
+
+            // =========================
+            // TOTAIS
+            // =========================
+
+            const subtotal = itens.reduce((acc, item) => {
+                return acc + (item.quantidade * item.preco);
+            }, 0);
+
+            const total =
+                subtotal -
+                desconto;
+
+            const saldoRestante =
+                total -
+                entrada;
+
+            // =========================
+            // SALVA VENDA
+            // =========================
+
+            const { data: venda, error: vendaError } = await supabase
+                .from("vendas")
+                .insert([
+                    {
+                        cliente_id: clienteId,
+                        subtotal,
+                        desconto,
+                        total,
+                        entrada,
+                        saldo_restante: saldoRestante,
+                        parcelas,
+                        forma_pagamento: formaPagamento,
+                        observacoes,
+                        primeiro_vencimento: primeiroVencimento,
+                    }
+                ])
+                .select()
+                .single();
+
+            if (vendaError) {
+                throw vendaError;
+            }
+
+            // =========================
+            // SALVA ITENS
+            // =========================
+
+            for (const item of itens) {
+
+                const valorTotal =
+                    item.quantidade * item.preco;
+
+                const { error: itemError } = await supabase
+                    .from("itens_venda")
+                    .insert([
+                        {
+                            venda_id: venda.id,
+                            produto_id: item.id,
+                            quantidade: item.quantidade,
+                            valor_unitario: item.preco,
+                            valor_total: valorTotal,
+                        }
+                    ]);
+
+                if (itemError) {
+                    throw itemError;
+                }
+
+                // =========================
+                // BAIXA ESTOQUE
+                // =========================
+
+                const novoEstoque =
+                    item.estoque - item.quantidade;
+
+                const { error: estoqueError } = await supabase
+                    .from("produtos")
+                    .update({
+                        estoque: novoEstoque
+                    })
+                    .eq("id", item.id);
+
+                if (estoqueError) {
+                    throw estoqueError;
+                }
+            }
+
+            // =========================
+            // CONTAS A RECEBER
+            // =========================
+
+            if (saldoRestante > 0) {
+
+                const valorParcela =
+                    saldoRestante / parcelas;
+
+                for (let i = 1; i <= parcelas; i++) {
+
+                    const vencimento =
+                        new Date(primeiroVencimento);
+
+                    vencimento.setMonth(
+                        vencimento.getMonth() + (i - 1)
+                    );
+
+                    const { error: contaError } = await supabase
+                        .from("contas_receber")
+                        .insert([
+                            {
+                                cliente_id: clienteId,
+                                venda_id: venda.id,
+                                valor: valorParcela,
+                                valor_pago: 0,
+                                saldo_restante: valorParcela,
+                                parcela: i,
+                                total_parcelas: parcelas,
+                                data_vencimento:
+                                    vencimento.toISOString(),
+                                status: "Pendente",
+                                forma_pagamento: formaPagamento,
+                            }
+                        ]);
+
+                    if (contaError) {
+                        throw contaError;
+                    }
+                }
+            }
+
+            alert("Venda finalizada com sucesso");
+
+            // =========================
+            // LIMPA TELA
+            // =========================
+
+            setItens([]);
+
+            setClienteId("");
+
+            setEntrada(0);
+
+            setDesconto(0);
+
+            setParcelas(1);
+
+            setObservacoes("");
+
+        } catch (error: any) {
+
+            console.error(error);
+
+            alert(
+                error.message ||
+                "Erro ao finalizar venda"
+            );
+
+        } finally {
+
+            setLoading(false);
+        }
+    }
 
             // =====================================
             // CRIAR VENDA
