@@ -628,7 +628,8 @@ export default function VendasPage() {
 
                         )}
 
-                    </tbody>
+                    </tbody>relatorios
+
 
                 </table>
 
