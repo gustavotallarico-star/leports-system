@@ -1,4 +1,5 @@
 import "./globals.css";
+
 import Sidebar from "@/components/layout/sidebar";
 import Header from "@/components/layout/header";
 
@@ -19,25 +20,17 @@ export default function RootLayout({
 
             <body className="bg-gray-100">
 
-                <div className="flex h-screen overflow-hidden">
+                <div className="flex">
 
-                    {/* SIDEBAR */}
                     <Sidebar />
 
-                    {/* CONTEÚDO */}
-                    <div className="flex flex-col flex-1 overflow-hidden">
+                    <div className="flex-1 min-h-screen">
 
-                        {/* HEADER */}
                         <Header />
 
-                        {/* PÁGINAS */}
-                        <main className="flex-1 overflow-y-auto p-6">
+                        <main className="p-8">
 
-                            <div className="max-w-7xl mx-auto">
-
-                                {children}
-
-                            </div>
+                            {children}
 
                         </main>
 
