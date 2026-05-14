@@ -1,36 +1,55 @@
-export default function FinanceiroPage() {
-    return (
-        <div className="p-10">
+"use client";
 
-            <h1 className="text-4xl font-bold mb-6">
-                Financeiro
-            </h1>
+<div className="p-10 bg-gray-100 min-h-screen">
 
-            <div className="grid grid-cols-3 gap-4">
+    <h1 className="text-4xl font-bold mb-8">
+        Financeiro
+    </h1>
 
-                <div className="bg-green-600 text-white p-6 rounded-2xl">
-                    <h2>Receitas</h2>
-                    <p className="text-3xl font-bold mt-2">
-                        R$ 12.500
-                    </p>
-                </div>
+    <div className="grid grid-cols-4 gap-6 mb-8">
 
-                <div className="bg-red-600 text-white p-6 rounded-2xl">
-                    <h2>Despesas</h2>
-                    <p className="text-3xl font-bold mt-2">
-                        R$ 3.400
-                    </p>
-                </div>
+        <div className="bg-white p-6 rounded-2xl shadow-md">
+            <p className="text-gray-500 mb-2">
+                Faturamento Hoje
+            </p>
 
-                <div className="bg-black text-white p-6 rounded-2xl">
-                    <h2>Lucro</h2>
-                    <p className="text-3xl font-bold mt-2">
-                        R$ 9.100
-                    </p>
-                </div>
-
-            </div>
-
+            <h2 className="text-3xl font-bold text-green-600">
+                R$ {faturamentoHoje.toFixed(2)}
+            </h2>
         </div>
-    )
+
+        <div className="bg-white p-6 rounded-2xl shadow-md">
+            <p className="text-gray-500 mb-2">
+                Faturamento Mensal
+            </p>
+
+            <h2 className="text-3xl font-bold text-blue-600">
+                R$ {faturamentoMes.toFixed(2)}
+            </h2>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-md">
+            <p className="text-gray-500 mb-2">
+                Contas a Receber
+            </p>
+
+            <h2 className="text-3xl font-bold text-orange-600">
+                R$ {contasReceber.toFixed(2)}
+            </h2>
+        </div>
+
+        <div className="bg-white p-6 rounded-2xl shadow-md">
+            <p className="text-gray-500 mb-2">
+                Lucro do Mês
+            </p>
+
+            <h2 className="text-3xl font-bold text-purple-600">
+                R$ {lucro.toFixed(2)}
+            </h2>
+        </div>
+
+    </div>
+
+</div>
+    );
 }

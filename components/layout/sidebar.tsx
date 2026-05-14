@@ -67,6 +67,14 @@ export default function Sidebar() {
                     Contas a Receber
                 </Link>
 
+                <Link
+                    href="/financeiro"
+                    className="flex items-center gap-3 hover:bg-gray-800 p-3 rounded-xl"
+                >
+                    <Wallet size={18} />
+                    Financeiro
+                </Link>
+
                 {/* RELATÓRIOS */}
                 <Link
                     href="/relatorios"
