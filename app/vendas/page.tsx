@@ -401,7 +401,9 @@ export default function VendasPage() {
 
             <div className="bg-white rounded-3xl shadow-sm overflow-hidden">
 
-                <table className="w-full">
+                <div className="overflow-x-auto">
+
+                    <table className="w-full min-w-[1000px]">
 
                     <thead className="bg-gray-100">
 
@@ -448,7 +450,7 @@ export default function VendasPage() {
                                 <td
                                     colSpan={7}
                                     className="
-                                        p-10
+                                        p-4 md:p-10
                                         text-center
                                         text-gray-500
                                     "

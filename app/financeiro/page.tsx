@@ -105,13 +105,13 @@ export default function FinanceiroPage() {
 
     return (
 
-        <div className="p-10 bg-gray-100 min-h-screen">
+        <div className="p-4 md:p-10 bg-gray-100 min-h-screen">
 
-            <h1 className="text-4xl font-bold mb-8">
+            <h1 className="text-2xl md:text-4xl font-bold mb-8">
                 Financeiro
             </h1>
 
-            <div className="grid grid-cols-4 gap-6">
+            <div className="grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
 
                 {/* FATURAMENTO HOJE */}
 

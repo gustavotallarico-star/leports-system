@@ -1,7 +1,5 @@
 import "./globals.css";
-
 import Sidebar from "@/components/layout/sidebar";
-import Header from "@/components/layout/header";
 
 export const metadata = {
     title: "Leport's ERP",
@@ -24,17 +22,18 @@ export default function RootLayout({
 
                     <Sidebar />
 
-                    <div className="flex-1 min-h-screen">
+                    <main className="
+                        flex-1
+                        min-h-screen
+                        p-4
+                        md:p-8
+                        mt-16
+                        md:mt-0
+                    ">
 
-                        <Header />
+                        {children}
 
-                        <main className="p-8">
-
-                            {children}
-
-                        </main>
-
-                    </div>
+                    </main>
 
                 </div>
 

@@ -386,7 +386,7 @@ export default function ProdutosPage() {
 
     return (
 
-        <div className="min-h-screen bg-gray-100 p-4 md:p-10">
+        <div className="min-h-screen bg-gray-100 p-4 md:p-4 md:p-10">
 
             {/* HEADER */}
 
@@ -410,7 +410,7 @@ export default function ProdutosPage() {
 
             <div className="bg-white p-6 rounded-3xl shadow-md mb-8">
 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div className="grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
 
                     <input
                         name="nome"
@@ -517,7 +517,9 @@ export default function ProdutosPage() {
 
                 <div className="overflow-x-auto">
 
-                    <table className="w-full min-w-[900px]">
+                    <div className="overflow-x-auto">
+
+                        <table className="w-full min-w-[1000px]">
 
                         <thead className="bg-gray-100">
 
@@ -567,7 +569,7 @@ export default function ProdutosPage() {
 
                                     <td
                                         colSpan={8}
-                                        className="p-10 text-center"
+                                            className="p-4 md:p-10 text-center"
                                     >
                                         Carregando...
                                     </td>
@@ -582,7 +584,7 @@ export default function ProdutosPage() {
 
                                         <td
                                             colSpan={8}
-                                            className="p-10 text-center"
+                                            className="p-4 md:p-10 text-center"
                                         >
                                             Nenhum produto encontrado
                                         </td>

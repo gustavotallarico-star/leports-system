@@ -1,91 +1,163 @@
 "use client";
 
 import Link from "next/link";
+
 import {
     LayoutDashboard,
     Users,
     Package,
     ShoppingCart,
+    Wallet,
     FileText,
-    Wallet
+    Menu,
+    DollarSign,
 } from "lucide-react";
+
+import {
+    Sheet,
+    SheetContent,
+    SheetTrigger,
+} from "@/components/ui/sheet";
+
+const menuItems = [
+    {
+        href: "/",
+        label: "Dashboard",
+        icon: LayoutDashboard,
+    },
+    {
+        href: "/clientes",
+        label: "Clientes",
+        icon: Users,
+    },
+    {
+        href: "/produtos",
+        label: "Produtos",
+        icon: Package,
+    },
+    {
+        href: "/vendas",
+        label: "Vendas",
+        icon: ShoppingCart,
+    },
+    {
+        href: "/contas-receber",
+        label: "Contas a Receber",
+        icon: Wallet,
+    },
+    {
+        href: "/financeiro",
+        label: "Financeiro",
+        icon: DollarSign,
+    },
+    {
+        href: "/relatorios",
+        label: "Relatórios",
+        icon: FileText,
+    },
+];
+
+function SidebarContent() {
+
+    return (
+
+        <div className="h-full bg-black text-white p-6">
+
+            <h1 className="text-3xl font-bold mb-10">
+
+                Leport's ERP
+
+            </h1>
+
+            <nav className="flex flex-col gap-3">
+
+                {menuItems.map((item) => {
+
+                    const Icon = item.icon;
+
+                    return (
+
+                        <Link
+                            key={item.href}
+                            href={item.href}
+                            className="
+                                flex items-center gap-3
+                                hover:bg-gray-800
+                                p-3
+                                rounded-xl
+                                transition
+                            "
+                        >
+
+                            <Icon size={18} />
+
+                            {item.label}
+
+                        </Link>
+
+                    );
+                })}
+
+            </nav>
+
+        </div>
+    );
+}
 
 export default function Sidebar() {
 
     return (
 
-        <aside className="w-64 h-screen bg-black text-white p-6">
+        <>
+            {/* DESKTOP */}
 
-            <h1 className="text-3xl font-bold mb-10">
-                Leport's ERP
-            </h1>
+            <aside className="hidden md:flex w-64 h-screen sticky top-0">
 
-            <nav className="flex flex-col gap-3">
+                <SidebarContent />
 
-                {/* DASHBOARD */}
-                <Link
-                    href="/"
-                    className="flex items-center gap-3 hover:bg-gray-800 p-3 rounded-xl"
-                >
-                    <LayoutDashboard size={18} />
-                    Dashboard
-                </Link>
+            </aside>
 
-                {/* CLIENTES */}
-                <Link
-                    href="/clientes"
-                    className="flex items-center gap-3 hover:bg-gray-800 p-3 rounded-xl"
-                >
-                    <Users size={18} />
-                    Clientes
-                </Link>
+            {/* MOBILE */}
 
-                {/* PRODUTOS */}
-                <Link
-                    href="/produtos"
-                    className="flex items-center gap-3 hover:bg-gray-800 p-3 rounded-xl"
-                >
-                    <Package size={18} />
-                    Produtos
-                </Link>
+            <div className="
+                md:hidden
+                fixed
+                top-0
+                left-0
+                w-full
+                bg-black
+                text-white
+                p-4
+                flex
+                items-center
+                justify-between
+                z-50
+            ">
 
-                {/* VENDAS */}
-                <Link
-                    href="/vendas"
-                    className="flex items-center gap-3 hover:bg-gray-800 p-3 rounded-xl"
-                >
-                    <ShoppingCart size={18} />
-                    Vendas
-                </Link>
+                <h1 className="font-bold">
+                    Leport's ERP
+                </h1>
 
-                {/* CONTAS A RECEBER */}
-                <Link
-                    href="/contas-receber"
-                    className="flex items-center gap-3 hover:bg-gray-800 p-3 rounded-xl"
-                >
-                    <Wallet size={18} />
-                    Contas a Receber
-                </Link>
+                <Sheet>
 
-                <Link
-                    href="/financeiro"
-                    className="flex items-center gap-3 hover:bg-gray-800 p-3 rounded-xl"
-                >
-                    <Wallet size={18} />
-                    Financeiro
-                </Link>
+                    <SheetTrigger>
 
-                {/* RELATÓRIOS */}
-                <Link
-                    href="/relatorios"
-                    className="flex items-center gap-3 hover:bg-gray-800 p-3 rounded-xl"
-                >
-                    <FileText size={18} />
-                    Relatórios
-                </Link>
+                        <Menu />
 
-            </nav>
+                    </SheetTrigger>
 
-        </aside>
+                    <SheetContent
+                        side="left"
+                        className="p-0 w-72"
+                    >
+
+                        <SidebarContent />
+
+                    </SheetContent>
+
+                </Sheet>
+
+            </div>
+        </>
     );
 }

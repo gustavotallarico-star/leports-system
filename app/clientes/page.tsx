@@ -681,7 +681,7 @@ export default function ClientesPage() {
 
                 </h3>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
+                <div className="grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
 
                     <input
                         name="nome"
@@ -823,7 +823,9 @@ export default function ClientesPage() {
 
                 <div className="overflow-x-auto">
 
-                    <table className="w-full min-w-[1400px]">
+                    <div className="overflow-x-auto">
+
+                        <table className="w-full min-w-[1000px]">
 
                         <thead className="bg-gray-100">
 

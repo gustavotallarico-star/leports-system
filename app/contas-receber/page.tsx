@@ -135,7 +135,7 @@ export default function ContasReceberPage() {
 
     return (
 
-        <div className="p-10 bg-gray-100 min-h-screen">
+        <div className="p-4 md:p-10 bg-gray-100 min-h-screen">
 
             <div className="flex justify-between items-center mb-8">
 
@@ -204,7 +204,9 @@ export default function ContasReceberPage() {
 
             <div className="bg-white rounded-2xl shadow-md overflow-hidden">
 
-                <table className="w-full">
+                <div className="overflow-x-auto">
+
+                    <table className="w-full min-w-[1000px]">
 
                     <thead className="bg-gray-100">
 
