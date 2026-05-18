@@ -9,8 +9,8 @@ import {
     ShoppingCart,
     Wallet,
     FileText,
-    Menu,
     DollarSign,
+    Menu,
 } from "lucide-react";
 
 import {
@@ -19,7 +19,7 @@ import {
     SheetTrigger,
 } from "@/components/ui/sheet";
 
-const menuItems = [
+const menus = [
     {
         href: "/",
         label: "Dashboard",
@@ -57,50 +57,44 @@ const menuItems = [
     },
 ];
 
-function SidebarContent() {
+function SidebarLinks() {
 
     return (
 
-        <div className="h-full bg-black text-white p-6">
+        <nav className="flex flex-col gap-2 mt-10">
 
-            <h1 className="text-3xl font-bold mb-10">
+            {menus.map((menu) => {
 
-                Leport's ERP
+                const Icon = menu.icon;
 
-            </h1>
+                return (
 
-            <nav className="flex flex-col gap-3">
+                    <Link
+                        key={menu.href}
+                        href={menu.href}
+                        className="
+                            flex
+                            items-center
+                            gap-3
+                            p-3
+                            rounded-xl
+                            hover:bg-zinc-800
+                            transition
+                        "
+                    >
 
-                {menuItems.map((item) => {
+                        <Icon size={20} />
 
-                    const Icon = item.icon;
+                        <span>
+                            {menu.label}
+                        </span>
 
-                    return (
+                    </Link>
 
-                        <Link
-                            key={item.href}
-                            href={item.href}
-                            className="
-                                flex items-center gap-3
-                                hover:bg-gray-800
-                                p-3
-                                rounded-xl
-                                transition
-                            "
-                        >
+                );
+            })}
 
-                            <Icon size={18} />
-
-                            {item.label}
-
-                        </Link>
-
-                    );
-                })}
-
-            </nav>
-
-        </div>
+        </nav>
     );
 }
 
@@ -111,30 +105,45 @@ export default function Sidebar() {
         <>
             {/* DESKTOP */}
 
-            <aside className="hidden md:flex w-64 h-screen sticky top-0">
+            <aside className="
+                hidden md:flex
+                w-64
+                h-screen
+                bg-black
+                text-white
+                p-6
+                flex-col
+                sticky
+                top-0
+            ">
 
-                <SidebarContent />
+                <h1 className="text-3xl font-bold">
+                    Leport's ERP
+                </h1>
+
+                <SidebarLinks />
 
             </aside>
 
-            {/* MOBILE */}
+            {/* MOBILE HEADER */}
 
-            <div className="
+            <header className="
                 md:hidden
                 fixed
                 top-0
                 left-0
-                w-full
+                right-0
+                h-16
                 bg-black
                 text-white
-                p-4
                 flex
                 items-center
                 justify-between
+                px-4
                 z-50
             ">
 
-                <h1 className="font-bold">
+                <h1 className="font-bold text-lg">
                     Leport's ERP
                 </h1>
 
@@ -148,16 +157,28 @@ export default function Sidebar() {
 
                     <SheetContent
                         side="left"
-                        className="p-0 w-72"
+                        className="
+                            bg-black
+                            text-white
+                            border-none
+                            w-72
+                            p-6
+                        "
                     >
 
-                        <SidebarContent />
+                        <h1 className="text-2xl font-bold">
+
+                            Leport's ERP
+
+                        </h1>
+
+                        <SidebarLinks />
 
                     </SheetContent>
 
                 </Sheet>
 
-            </div>
+            </header>
         </>
     );
 }
